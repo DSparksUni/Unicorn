@@ -1,0 +1,6 @@
+CMakePresets.json
+CMakeUserPresets.json
+vcpkg.json
+vcpkg-configuration.json
+vcpkg_installed
+build
