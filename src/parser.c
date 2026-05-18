@@ -1,0 +1,183 @@
+#include "headers/parser.h"
+
+uniParser* uni_createParser(uniToken* tokens, size_t tokens_len) {
+    uniParser* parser = malloc(sizeof(uniParser));
+    if(!parser) return NULL;
+
+    parser->tokens = tokens;
+    parser->num_tokens = tokens_len;
+    parser->cursor = 0;
+
+    return parser;
+}
+
+void uni_destroyParser(uniParser* parser) {
+    free(parser->tokens);
+    free(parser);
+}
+
+uniToken uni_peekParser(uniParser* parser) {
+    return parser->tokens[parser->cursor];
+}
+
+uniToken uni_advanceParser(uniParser* parser) {
+    uniToken tok = parser->tokens[parser->cursor];
+    if(tok.type != UNI_TOKEN_EOF) parser->cursor++;
+
+    return tok;
+}
+
+bool uni_expectParser(uniParser* parser, uniTokenType type) {
+    if(uni_peekParser(parser).type == type) {
+        uni_advanceParser(parser);
+        return true;
+    }
+
+    return false;
+}
+
+uniOp* uni_parseOne(uniParser* parser) {
+    uniToken tok = uni_peekParser(parser);
+    switch(tok.type) {
+        case UNI_TOKEN_INT: {
+            uni_advanceParser(parser);
+
+            uniOp* op = malloc(sizeof(uniOp));
+            if(!op) return NULL;
+
+            op->type = UNI_OP_PUSH_INT;
+            op->ival = tok.ival;
+
+            return op;
+        } break;
+
+        case UNI_TOKEN_STRING: {
+            uni_advanceParser(parser);
+
+            uniOp* op = malloc(sizeof(uniOp));
+            if(!op) return NULL;
+
+            op->type = UNI_OP_PUSH_STR;
+            op->sval.start = tok.start;
+            op->sval.len = tok.len;
+
+            return op;
+        } break;
+
+        case UNI_TOKEN_LBRACE: {
+            uni_advanceParser(parser);
+            return uni_parseBlock(parser);
+        } break;
+
+        case UNI_TOKEN_WORD: {
+            uni_advanceParser(parser);
+
+            uniOp* op = malloc(sizeof(uniOp));
+            if(!op) return NULL;
+
+            op->type = UNI_OP_WORD;
+            op->sval.start = tok.start;
+            op->sval.len = tok.len;
+
+            return op;
+        } break;
+
+        default: return NULL;
+    }
+}
+
+uniOp* uni_parseBlock(uniParser* parser) {
+    uniOp* op = malloc(sizeof(uniOp));
+    if(!op) return NULL;
+
+    op->type = UNI_OP_BLOCK;
+    op->bval.num_items = 0;
+
+    size_t op_cap = 8;
+    op->bval.items = malloc(op_cap * sizeof(uniOp*));
+    if(!op->bval.items) return NULL;
+
+    while(
+        uni_peekParser(parser).type != UNI_TOKEN_RBRACE &&
+        uni_peekParser(parser).type != UNI_TOKEN_EOF
+    ) {
+        uniOp* child = uni_parseOne(parser);
+        if(!child) break;
+
+        if(op->bval.num_items >= op_cap) {
+            op_cap *= 2;
+            op->bval.items = realloc(op->bval.items, op_cap * sizeof(uniOp*));
+            if(!op->bval.items) break;
+        }
+
+        op->bval.items[op->bval.num_items++] = child;
+    }
+
+    uni_expectParser(parser, UNI_TOKEN_RBRACE);
+    return op;
+}
+
+uniOp* uni_parseProgram(uniParser* parser) {
+    uniOp* op = malloc(sizeof(uniOp));
+    if(!op) return NULL;
+
+    op->type = UNI_OP_BLOCK;
+    op->bval.num_items = 0;
+
+    size_t op_cap = 16;
+    op->bval.items = malloc(op_cap * sizeof(uniOp*));
+    if(!op->bval.items) return NULL;
+
+    while(uni_peekParser(parser).type != UNI_TOKEN_EOF) {
+        uniOp* child = uni_parseOne(parser);
+        if(!child) break;
+
+        if(op->bval.num_items >= op_cap) {
+            op_cap *= 2;
+            op->bval.items = realloc(op->bval.items, op_cap * sizeof(uniOp*));
+            if(!op->bval.items) return NULL;
+        }
+
+        op->bval.items[op->bval.num_items++] = child;
+    }
+
+    return op;
+}
+
+void print_indent(size_t depth) {
+    for(size_t _ = 0; _ < depth; _++) printf(" ");
+}
+
+void uni_printOp(uniOp* op, size_t indent) {
+    print_indent(indent);
+    switch(op->type) {
+        case UNI_OP_PUSH_INT: {
+            printf("PUSH_INT %lld\n", op->ival);
+        } break;
+
+        case UNI_OP_PUSH_STR: {
+            printf("PUSH_STR \"%.*s\"\n", (int)op->sval.len, op->sval.start);
+        } break;
+
+        case UNI_OP_WORD: {
+            printf("WORD \"%.*s\"\n", (int)op->sval.len, op->sval.start);
+        } break;
+
+        case UNI_OP_BLOCK: {
+            printf("BLOCK (length %zu)\n", op->bval.num_items);
+            for(size_t i = 0; i < op->bval.num_items; i++) {
+                uni_printOp(op->bval.items[i], indent+4);
+            }
+        } break;
+    }
+}
+
+void uni_destroyOp(uniOp* op) {
+    if(op->type == UNI_OP_BLOCK) {
+        for(size_t i = 0; i < op->bval.num_items; i++)
+            uni_destroyOp(op->bval.items[i]);
+        free(op->bval.items);
+    }
+
+    free(op);
+}

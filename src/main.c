@@ -3,6 +3,7 @@
 
 #include "headers/util.h"
 #include "headers/lexer.h"
+#include "headers/parser.h"
 
 int main(int argc, char** argv) {
     if(argc < 2) {
@@ -24,13 +25,28 @@ int main(int argc, char** argv) {
         free(content);
         return -1;
     }
-
     size_t num_tokens = uni_lex(content, tokens, content_size);
-    for(size_t i = 0; i < num_tokens; i++) {
-        uni_printToken(tokens[i]);
+
+    uniParser* parser = uni_createParser(tokens, num_tokens);
+    if(!parser) {
+        fprintf(stderr, "[ERROR] Failed to create parser...\n");
+        free(tokens);
+        free(content);
+        return -1;
     }
 
-    free(tokens);
+    uniOp* program = uni_parseProgram(parser);
+    if(!program) {
+        fprintf(stderr, "[ERROR] Failed to parse program...\n");
+        uni_destroyParser(parser);
+        free(content);
+        return -1;
+    }
+
+    uni_printOp(program, 0);
+
+    uni_destroyOp(program);
+    uni_destroyParser(parser);
     free(content);
     return 0;
 }
