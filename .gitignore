@@ -4,3 +4,5 @@ vcpkg.json
 vcpkg-configuration.json
 vcpkg_installed
 build
+*.ll
+*.exe

@@ -4,6 +4,7 @@
 #include "headers/util.h"
 #include "headers/lexer.h"
 #include "headers/parser.h"
+#include "headers/emitter.h"
 
 int main(int argc, char** argv) {
     if(argc < 2) {
@@ -43,7 +44,19 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    uni_printOp(program, 0);
+    uniEmitter* emitter = uni_createEmitter("out.ll");
+    if(!emitter) {
+        fprintf(stderr, "[ERROR] Failed to create emitter...\n");
+        uni_destroyOp(program);
+        uni_destroyParser(parser);
+        free(content);
+        return -1;
+    }
+
+    uni_emitProgram(emitter, program);
+    uni_destroyEmitter(emitter);
+
+    system("clang -O1 out.ll -o out.exe");
 
     uni_destroyOp(program);
     uni_destroyParser(parser);
