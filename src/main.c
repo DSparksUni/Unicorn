@@ -1,22 +1,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "headers/args.h"
 #include "headers/util.h"
 #include "headers/lexer.h"
 #include "headers/parser.h"
 #include "headers/emitter.h"
 
 int main(int argc, char** argv) {
-    if(argc < 2) {
-        fprintf(stderr, "[ERROR] No input file supplied...\n");
+    uniArgs args;
+    if(!uni_parseArgs(argc, argv, &args)) {
         return -1;
     }
-    char* input_file = argv[1];
 
     size_t content_size;
-    char* content = uni_readFile(input_file, &content_size);
+    char* content = uni_readFile(args.input_file, &content_size);
     if(!content) {
-        fprintf(stderr, "[ERROR] Failed to read file '%s'\n", input_file);
+        fprintf(stderr, "[ERROR] Failed to read file '%s'\n", args.input_file);
         return -1;
     }
 
@@ -56,7 +56,14 @@ int main(int argc, char** argv) {
     uni_emitProgram(emitter, program);
     uni_destroyEmitter(emitter);
 
-    system("clang -O1 out.ll -o out.exe");
+    if(args.output_file) {
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd), "clang -O1 out.ll -o %s", args.output_file);
+        system(cmd);
+    } else {
+        system("clang -O1 out.ll -o out.exe");
+    }
+    remove("out.ll");
 
     uni_destroyOp(program);
     uni_destroyParser(parser);
