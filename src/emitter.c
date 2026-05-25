@@ -10,6 +10,8 @@ uniEmitter* uni_createEmitter(const char* out_path) {
         return NULL;
     }
     emitter->tmp_counter = 0;
+    emitter->str_counter = 0;
+    emitter->stack = (uniEmitStack){NULL, 0, 0};
 
     return emitter;
 }
@@ -18,134 +20,39 @@ void uni_destroyEmitter(uniEmitter* emitter) {
     free(emitter);
 }
 
-size_t getFreshValue(uniEmitter* emitter) {
-    return emitter->tmp_counter++;
-}
-
-void emitPush(
-    uniEmitter* emitter,
-    size_t stack, size_t sp_slot,
-    const char* val_type, const char* val
-) {
-    size_t t0 = getFreshValue(emitter);
-    size_t t1 = getFreshValue(emitter);
-    size_t t2 = getFreshValue(emitter);
-
-    fprintf(
-        emitter->out,
-        "    %%%zu = load i32, ptr %%%zu\n"                                     // Load sp
-        "    %%%zu = getelementptr [1024 x %s], ptr %%%zu, i32 0, i32 %%%zu\n"  // Get slot
-        "    store %s %s, ptr %%%zu\n"                                         // Store value
-        "    %%%zu = add i32 %%%zu, 1\n"                                        // Increment sp
-        "    store i32 %%%zu, ptr %%%zu\n",                                     // Write back sp
-        t0, sp_slot,
-        t1, val_type, stack, t0,
-        val_type, val, t1,
-        t2, t0,
-        t2, sp_slot
-    );
-}
-
-void emitPop(
-    uniEmitter* emitter,
-    size_t stack, size_t sp_slot,
-    const char* val_type, size_t* out_tmp
-) {
-    size_t t0 = getFreshValue(emitter);
-    size_t t1 = getFreshValue(emitter);
-    size_t t2 = getFreshValue(emitter);
-    size_t t3 = getFreshValue(emitter);
-    *out_tmp = t3;
-
-    fprintf(
-        emitter->out,
-        "    %%%zu = load i32, ptr %%%zu\n"                                     // Load sp
-        "    %%%zu = sub i32 %%%zu, 1\n"                                        // Decrement sp
-        "    store i32 %%%zu, ptr %%%zu\n"                                      // Write back sp
-        "    %%%zu = getelementptr [1024 x %s], ptr %%%zu, i32 0, i32 %%%zu\n"  // Get slot
-        "    %%%zu = load %s, ptr %%%zu\n",                                     // Load value
-        t0, sp_slot,
-        t1, t0,
-        t1, sp_slot,
-        t2, val_type, stack, t1,
-        t3, val_type, t2
-    );
-}
-
-void emitPushConstant(uniEmitter* emitter, size_t stack, size_t sp, int64_t ival) {
-    size_t t_val = getFreshValue(emitter);
-    fprintf(emitter->out, "    %%%zu = add i64 0, %lld\n", t_val, ival);
-
-    char val[24];
-    snprintf(val, sizeof(val), "%%%zu", t_val);
-    emitPush(emitter, stack, sp, "i64", val);
-}
-
-void uni_emitOp(uniEmitter* emitter, uniOp* op, size_t stack, size_t sp) {
+void uni_emitOp(uniEmitter* emitter, uniOp* op) {
     switch(op->type) {
         case UNI_OP_PUSH_INT: {
-            emitPushConstant(emitter, stack, sp, op->ival);
+            size_t r = uni_getFreshTemp(emitter);
+
+            fprintf(emitter->out, "    %%%zu = add i64 0, %lld\n", r, op->ival);
+
+            uni_emitPush(emitter, r);
         } break;
 
         case UNI_OP_PUSH_STR: {
-            // TODO: Implement push_str
+            size_t r = uni_getFreshTemp(emitter);
+            size_t str_len = op->sval.len - 2;
+
+            fprintf(
+                emitter->out, 
+                "    %%%zu = getelementptr [%zu x i8], ptr @str_%zu, i32 0, i32 0\n",
+                r, str_len + 1, op->sval.global_idx
+            );
+
+            uni_emitPush(emitter, r);
         } break;
 
         case UNI_OP_WORD: {
-            const char* word = op->sval.start;
-            size_t word_len = op->sval.len;
-
-            if(word_len == 1 && word[0] == '+') {
-                size_t a, b;
-                emitPop(emitter, stack, sp, "i64", &b);
-                emitPop(emitter, stack, sp, "i64", &a);
-                size_t r = getFreshValue(emitter);
-                fprintf(emitter->out, "    %%%zu = add i64 %%%zu, %%%zu\n", r, a, b);
-
-                char val[24];
-                snprintf(val, sizeof(val), "%%%zu", r);
-                emitPush(emitter, stack, sp, "i64", val);
-            } else if(word_len == 1 && word[0] == '-') {
-                size_t a, b;
-                emitPop(emitter, stack, sp, "i64", &b);
-                emitPop(emitter, stack, sp, "i64", &a);
-                size_t r = getFreshValue(emitter);
-                fprintf(emitter->out, "    %%%zu = sub i64 %%%zu, %%%zu\n", r, a, b);
-
-                char val[24];
-                snprintf(val, sizeof(val), "%%%zu", r);
-                emitPush(emitter, stack, sp, "i64", val);
-            } else if(word_len == 1 && word[0] == '*') {
-                size_t a, b;
-                emitPop(emitter, stack, sp, "i64", &b);
-                emitPop(emitter, stack, sp, "i64", &a);
-                size_t r = getFreshValue(emitter);
-                fprintf(emitter->out, "    %%%zu = mul i64 %%%zu, %%%zu\n", r, a, b);
-
-                char val[24];
-                snprintf(val, sizeof(val), "%%%zu", r);
-                emitPush(emitter, stack, sp, "i64", val);
-            } else if(word_len == 1 && word[0] == '/') {
-                size_t a, b;
-                emitPop(emitter, stack, sp, "i64", &b);
-                emitPop(emitter, stack, sp, "i64", &a);
-                size_t r = getFreshValue(emitter);
-                fprintf(emitter->out, "    %%%zu = sdiv i64 %%%zu, %%%zu\n", r, a, b);
-
-                char val[24];
-                snprintf(val, sizeof(val), "%%%zu", r);
-                emitPush(emitter, stack, sp, "i64", val);
-            } else if(word_len == 6 && strncmp(word, "printi", 6) == 0) {
-                size_t val;
-                emitPop(emitter, stack, sp, "i64", &val);
-                size_t r = getFreshValue(emitter);
+            uniWord* word = uni_lookupWord(op->sval.start, op->sval.len);
+            if(word) {
+                // Unknown words should've been caught in typechecking
+                word->emit(emitter);
+            } else {
                 fprintf(
-                    emitter->out,
-                    "    %%%zu = call i32 (ptr, ...) @printf(ptr @fmt_int, i64 %%%zu)\n",
-                    r, val
+                    stderr, "[ERROR] (line %zu) Unknown word '%.*s' got past typechecking\n",
+                    op->line, (int)op->sval.len, op->sval.start
                 );
-            } else if(word_len == 6 && strncmp(word, "prints", 6) == 0) {
-                // TODO: prints
             }
         } break;
 
@@ -155,9 +62,57 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op, size_t stack, size_t sp) {
     }
 }
 
-void uni_emitBlock(uniEmitter* emitter, uniOp* block, size_t stack, size_t sp) {
+void uni_emitBlock(uniEmitter* emitter, uniOp* block) {
     for(size_t i = 0; i < block->bval.num_items; i++) {
-        uni_emitOp(emitter, block->bval.items[i], stack, sp);
+        uni_emitOp(emitter, block->bval.items[i]);
+    }
+}
+
+static void collect_strings(uniEmitter* emitter, uniOp* op) {
+    switch(op->type) {
+        case UNI_OP_PUSH_STR: {
+            size_t idx = emitter->str_counter++;
+            op->sval.global_idx = idx;
+
+            size_t decoded_len = 0;
+            for(size_t i = 1; i < op->sval.len-1; i++) {
+                if(op->sval.start[i] == '\\') i++;
+                decoded_len++;
+            }
+
+            fprintf(
+                emitter->out, "@str_%zu = private constant [%zu x i8] c\"",
+                idx, decoded_len+1
+            );
+            for(size_t i = 1; i < op->sval.len-1; i++) {
+                unsigned char c = (unsigned char)op->sval.start[i];
+                if(c == '\\') {
+                    i++;
+                    switch(op->sval.start[i]) {
+                        case 'n': fprintf(emitter->out, "\\0A"); break;
+                        case 't': fprintf(emitter->out, "\\09"); break;
+                        case 'r': fprintf(emitter->out, "\\0D"); break;
+                        case '\\': fprintf(emitter->out, "\\5C"); break;
+                        case '\"': fprintf(emitter->out, "\\22"); break;
+                        case '0': fprintf(emitter->out, "\\00"); break;
+                        default: fputc(op->sval.start[i], emitter->out); break;
+                    }
+                } else if(c < 32 || c > 126) {
+                    fprintf(emitter->out, "\\%02X", c);
+                } else {
+                    fputc(c, emitter->out);
+                }
+            }
+            fprintf(emitter->out, "\\00\"\n");
+        } break;
+
+        case UNI_OP_BLOCK: {
+            for(size_t i = 0; i < op->bval.num_items; i++) {
+                collect_strings(emitter, op->bval.items[i]);
+            }
+        } break;
+
+        default: break;
     }
 }
 
@@ -166,28 +121,20 @@ void uni_emitProgram(uniEmitter* emitter, uniOp* program) {
     fprintf(
         emitter->out,
         "@fmt_int = private constant [6 x i8] c\"%%lld\\0A\\00\"\n"
-        "@fmt_str = private constant [4 x i8] c\"%%s\\0A\\00\"\n"
+        "@fmt_str = private constant [3 x i8] c\"%%s\\00\"\n"
         "\n"
         "declare i32 @printf(ptr, ...)\n"
         "\n"
     );
 
+    // Declare string constants
+    collect_strings(emitter, program);
+
     // Emit main
     fprintf(emitter->out, "define i32 @main() {\nentry:\n");
 
-    // Set up stack
-    size_t stack = getFreshValue(emitter);
-    size_t sp = getFreshValue(emitter);
-    fprintf(
-        emitter->out,
-        "    %%%zu = alloca [1024 x i64], align 8\n"
-        "    %%%zu = alloca i32, align 4\n"
-        "    store i32 0, ptr %%%zu\n",
-        stack, sp, sp
-    );
-
     // Emit program body
-    uni_emitBlock(emitter, program, stack, sp);
+    uni_emitBlock(emitter, program);
 
     fprintf(emitter->out, "    ret i32 0\n}\n");
 }

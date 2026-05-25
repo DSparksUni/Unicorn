@@ -28,11 +28,13 @@ typedef enum uniOpType_t {
 
 typedef struct uniOp_t {
     uniOpType type;
+    size_t line;
     union {
         int64_t ival;
         struct {
             const char* start;
             size_t len;
+            size_t global_idx;
         } sval;
         struct {
             struct uniOp_t** items;

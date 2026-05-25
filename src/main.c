@@ -6,6 +6,7 @@
 #include "headers/lexer.h"
 #include "headers/parser.h"
 #include "headers/emitter.h"
+#include "headers/typecheck.h"
 
 int main(int argc, char** argv) {
     uniArgs args;
@@ -39,6 +40,12 @@ int main(int argc, char** argv) {
     uniOp* program = uni_parseProgram(parser);
     if(!program) {
         fprintf(stderr, "[ERROR] Failed to parse program...\n");
+        uni_destroyParser(parser);
+        free(content);
+        return -1;
+    }
+
+    if(!uni_typecheck(program)) {
         uni_destroyParser(parser);
         free(content);
         return -1;

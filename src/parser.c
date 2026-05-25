@@ -46,6 +46,7 @@ uniOp* uni_parseOne(uniParser* parser) {
             if(!op) return NULL;
 
             op->type = UNI_OP_PUSH_INT;
+            op->line = tok.line;
             op->ival = tok.ival;
 
             return op;
@@ -58,6 +59,7 @@ uniOp* uni_parseOne(uniParser* parser) {
             if(!op) return NULL;
 
             op->type = UNI_OP_PUSH_STR;
+            op->line = tok.line;
             op->sval.start = tok.start;
             op->sval.len = tok.len;
 
@@ -76,6 +78,7 @@ uniOp* uni_parseOne(uniParser* parser) {
             if(!op) return NULL;
 
             op->type = UNI_OP_WORD;
+            op->line = tok.line;
             op->sval.start = tok.start;
             op->sval.len = tok.len;
 
