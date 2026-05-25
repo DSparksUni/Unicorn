@@ -11,6 +11,7 @@ uniEmitter* uni_createEmitter(const char* out_path) {
     }
     emitter->tmp_counter = 0;
     emitter->str_counter = 0;
+    emitter->if_counter = 0;
     emitter->stack = (uniEmitStack){NULL, 0, 0};
 
     return emitter;
@@ -59,6 +60,32 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
         case UNI_OP_BLOCK: {
             // TODO: blocks
         } break;
+
+        case UNI_OP_IF: {
+            size_t id = emitter->if_counter++;
+            size_t cond = uni_emitPop(emitter);
+
+            size_t bool_tmp = uni_getFreshTemp(emitter);
+            fprintf(
+                emitter->out,
+                "    %%%zu = icmp ne i64 %%%zu, 0\n"
+                "    br i1 %%%zu, label %%if_%zu_then, label %%if_%zu_end\n"
+                "\nif_%zu_then:\n",
+                bool_tmp, cond,
+                bool_tmp, id, id,
+                id
+            );
+
+            uni_emitBlock(emitter, op);
+
+            fprintf(
+                emitter->out,
+                "    br label %%if_%zu_end\n"
+                "\nif_%zu_end:\n",
+                id,
+                id
+            );
+        } break;
     }
 }
 
@@ -106,7 +133,8 @@ static void collect_strings(uniEmitter* emitter, uniOp* op) {
             fprintf(emitter->out, "\\00\"\n");
         } break;
 
-        case UNI_OP_BLOCK: {
+        case UNI_OP_BLOCK:
+        case UNI_OP_IF: {
             for(size_t i = 0; i < op->bval.num_items; i++) {
                 collect_strings(emitter, op->bval.items[i]);
             }

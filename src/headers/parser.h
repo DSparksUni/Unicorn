@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "lexer.h"
 
@@ -24,6 +25,7 @@ typedef enum uniOpType_t {
     UNI_OP_PUSH_STR,
     UNI_OP_WORD,
     UNI_OP_BLOCK,
+    UNI_OP_IF,
 } uniOpType;
 
 typedef struct uniOp_t {

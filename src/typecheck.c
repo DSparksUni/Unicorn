@@ -69,6 +69,33 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
         case UNI_OP_BLOCK: {
             return tc_block(stack, op);
         }
+
+        case UNI_OP_IF: {
+            if(!tc_pop(stack, UNI_TYPE_INT, op->line)) return false;
+
+            // Speculatively type-check the body against a copy of the stack
+            uniTypeStack spec = {0};
+            spec.cap = stack->count;
+            if(spec.cap > 0) {
+                spec.items = malloc(spec.cap * sizeof(uniType));
+                if(!spec.items) return false;
+                memcpy(spec.items, stack->items, stack->count * sizeof(uniType));
+            }
+            spec.count = stack->count;
+
+            bool body_ok = tc_block(stack, op);
+            if(body_ok && spec.count != stack->count) {
+                fprintf(
+                    stderr, "[ERROR] (line %zu) 'if' body must be stack-neutral: "
+                    "started with %zu item(s), ended with %zu\n",
+                    op->line, stack->count, spec.count
+                );
+                body_ok = false;
+            }
+
+            if(spec.items) free(spec.items);
+            return body_ok;
+        }
     }
 }
 

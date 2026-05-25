@@ -74,7 +74,35 @@ uniOp* uni_parseOne(uniParser* parser) {
         case UNI_TOKEN_WORD: {
             uni_advanceParser(parser);
 
-            uniOp* op = malloc(sizeof(uniOp));
+            if(tok.len == 2 && strncmp(tok.start, "if", 2) == 0) {
+                if(uni_peekParser(parser).type != UNI_TOKEN_LBRACE) {
+                    fprintf(
+                        stderr, "[ERROR] (line %zu) 'if' must be followed by a block\n",
+                        tok.line
+                    );
+                    return NULL;
+                }
+                uni_advanceParser(parser);
+
+                uniOp* body = uni_parseBlock(parser);
+                if(!body) return NULL;
+
+                uniOp* op = malloc(sizeof(uniOp));
+                if(!op) {
+                    uni_destroyOp(body);
+                    return NULL;
+                }
+
+                op->type = UNI_OP_IF;
+                op->line = tok.line;
+                op->bval.items = body->bval.items;
+                op->bval.num_items = body->bval.num_items;
+
+                free(body);
+                return op;
+            }
+
+                uniOp* op = malloc(sizeof(uniOp));
             if(!op) return NULL;
 
             op->type = UNI_OP_WORD;
@@ -168,6 +196,13 @@ void uni_printOp(uniOp* op, size_t indent) {
 
         case UNI_OP_BLOCK: {
             printf("BLOCK (length %zu)\n", op->bval.num_items);
+            for(size_t i = 0; i < op->bval.num_items; i++) {
+                uni_printOp(op->bval.items[i], indent+4);
+            }
+        } break;
+
+        case UNI_OP_IF: {
+            printf("IF (body length %zu)\n", op->bval.num_items);
             for(size_t i = 0; i < op->bval.num_items; i++) {
                 uni_printOp(op->bval.items[i], indent+4);
             }

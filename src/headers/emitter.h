@@ -18,6 +18,7 @@ typedef struct uniEmitter_t {
     FILE* out;
     size_t tmp_counter;
     size_t str_counter;
+    size_t if_counter;
     uniEmitStack stack;
 } uniEmitter;
 

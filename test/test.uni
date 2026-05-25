@@ -4,3 +4,11 @@
 276 4 / printi
 
 "Hello, world!\n" prints
+
+0 0 == if {
+    "This should print\n" prints
+}
+
+0 0 < if {
+    "This shouldn't print\n" prints
+}
