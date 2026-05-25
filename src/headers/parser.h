@@ -42,6 +42,10 @@ typedef struct uniOp_t {
             struct uniOp_t** items;
             size_t num_items;
         } bval;
+        struct {
+            struct uniOp_t* then_body;
+            struct uniOp_t* else_body;
+        } cval;
     };
 } uniOp;
 

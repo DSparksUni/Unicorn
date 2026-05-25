@@ -64,27 +64,101 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
         case UNI_OP_IF: {
             size_t id = emitter->if_counter++;
             size_t cond = uni_emitPop(emitter);
-
             size_t bool_tmp = uni_getFreshTemp(emitter);
-            fprintf(
-                emitter->out,
-                "    %%%zu = icmp ne i64 %%%zu, 0\n"
-                "    br i1 %%%zu, label %%if_%zu_then, label %%if_%zu_end\n"
-                "\nif_%zu_then:\n",
-                bool_tmp, cond,
-                bool_tmp, id, id,
-                id
-            );
 
-            uni_emitBlock(emitter, op);
+            size_t stack_depth_before = emitter->stack.count;
 
-            fprintf(
-                emitter->out,
-                "    br label %%if_%zu_end\n"
-                "\nif_%zu_end:\n",
-                id,
-                id
-            );
+            if(op->cval.else_body) {
+                fprintf(
+                    emitter->out,
+                    "    %%%zu = icmp ne i64 %%%zu, 0\n"
+                    "    br i1 %%%zu, label %%if_%zu_then, label %%if_%zu_else\n"
+                    "\nif_%zu_then:\n",
+                    bool_tmp, cond,
+                    bool_tmp, id, id,
+                    id
+                );
+            } else {
+                fprintf(
+                    emitter->out,
+                    "    %%%zu = icmp ne i64 %%%zu, 0\n"
+                    "    br i1 %%%zu, label %%if_%zu_then, label %%if_%zu_end\n"
+                    "\nif_%zu_then:\n",
+                    bool_tmp, cond,
+                    bool_tmp, id, id,
+                    id
+                );
+            }
+
+            uni_emitBlock(emitter, op->cval.then_body);
+
+            size_t num_results = emitter->stack.count - stack_depth_before;
+            size_t* then_results = NULL;
+            if(num_results > 0) {
+                then_results = malloc(num_results * sizeof(size_t));
+                if(then_results) {
+                    for(size_t i = 0; i < num_results; i++) {
+                        then_results[i] = emitter->stack.items[stack_depth_before + i];
+                    }
+                    emitter->stack.count = stack_depth_before;
+                }
+            }
+
+            if(op->cval.else_body) {
+                fprintf(
+                    emitter->out,
+                    "    br label %%if_%zu_end\n"
+                    "\nif_%zu_else:\n",
+                    id,
+                    id
+                );
+
+                uni_emitBlock(emitter, op->cval.else_body);
+
+                size_t* else_results = NULL;
+                if(num_results > 0) {
+                    else_results = malloc(num_results * sizeof(size_t));
+                    for(size_t i = 0; i < num_results; i++) {
+                        else_results[i] = emitter->stack.items[stack_depth_before + i];
+                    }
+                    emitter->stack.count = stack_depth_before;
+                }
+
+                fprintf(
+                    emitter->out,
+                    "    br label %%if_%zu_end\n"
+                    "\nif_%zu_end:\n",
+                    id,
+                    id
+                );
+
+                // Emit a phi node for each value produced by both branches
+                for(size_t i = 0; i < num_results; i++) {
+                    size_t phi = uni_getFreshTemp(emitter);
+                    fprintf(
+                        emitter->out,
+                        "    %%%zu = phi i64 [ %%%zu, %%if_%zu_then ], "
+                        "[ %%%zu, %%if_%zu_else ]\n",
+                        phi, then_results[i], id,
+                        else_results[i], id
+                    );
+
+                    uni_emitPush(emitter, phi);
+                }
+
+                if(then_results) free(then_results);
+                if(else_results) free(else_results);
+            } else {
+                fprintf(
+                    emitter->out,
+                    "    br label %%if_%zu_end\n"
+                    "\nif_%zu_end:\n",
+                    id,
+                    id
+                );
+
+                if(then_results) free(then_results);
+            }
         } break;
     }
 }
@@ -133,11 +207,15 @@ static void collect_strings(uniEmitter* emitter, uniOp* op) {
             fprintf(emitter->out, "\\00\"\n");
         } break;
 
-        case UNI_OP_BLOCK:
-        case UNI_OP_IF: {
+        case UNI_OP_BLOCK: {
             for(size_t i = 0; i < op->bval.num_items; i++) {
                 collect_strings(emitter, op->bval.items[i]);
             }
+        } break;
+
+        case UNI_OP_IF: {
+            collect_strings(emitter, op->cval.then_body);
+            if(op->cval.else_body) collect_strings(emitter, op->cval.else_body);
         } break;
 
         default: break;

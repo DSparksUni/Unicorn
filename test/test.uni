@@ -11,4 +11,6 @@
 
 0 0 < if {
     "This shouldn't print\n" prints
+} else {
+    "But this should now\n" prints
 }

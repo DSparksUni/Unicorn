@@ -84,25 +84,49 @@ uniOp* uni_parseOne(uniParser* parser) {
                 }
                 uni_advanceParser(parser);
 
-                uniOp* body = uni_parseBlock(parser);
-                if(!body) return NULL;
+                uniOp* then_body = uni_parseBlock(parser);
+                if(!then_body) return NULL;
+
+                uniOp* else_body = NULL;
+                uniToken next = uni_peekParser(parser);
+                if(
+                    next.type == UNI_TOKEN_WORD && next.len == 4 &&
+                    strncmp(next.start, "else", 4) == 0
+                ) {
+                    uni_advanceParser(parser);
+                    if(uni_peekParser(parser).type != UNI_TOKEN_LBRACE) {
+                        fprintf(
+                            stderr, "[ERROR] (line %zu) 'else' must be followed by a block\n",
+                            next.line
+                        );
+                        uni_destroyOp(then_body);
+                        return NULL;
+                    }
+                    uni_advanceParser(parser);
+
+                    else_body = uni_parseBlock(parser);
+                    if(!else_body) {
+                        uni_destroyOp(then_body);
+                        return NULL;
+                    }
+                }
 
                 uniOp* op = malloc(sizeof(uniOp));
                 if(!op) {
-                    uni_destroyOp(body);
+                    uni_destroyOp(then_body);
+                    if(else_body) uni_destroyOp(else_body);
                     return NULL;
                 }
 
                 op->type = UNI_OP_IF;
                 op->line = tok.line;
-                op->bval.items = body->bval.items;
-                op->bval.num_items = body->bval.num_items;
+                op->cval.then_body = then_body;
+                op->cval.else_body = else_body;
 
-                free(body);
                 return op;
             }
 
-                uniOp* op = malloc(sizeof(uniOp));
+            uniOp* op = malloc(sizeof(uniOp));
             if(!op) return NULL;
 
             op->type = UNI_OP_WORD;
@@ -202,9 +226,20 @@ void uni_printOp(uniOp* op, size_t indent) {
         } break;
 
         case UNI_OP_IF: {
-            printf("IF (body length %zu)\n", op->bval.num_items);
-            for(size_t i = 0; i < op->bval.num_items; i++) {
-                uni_printOp(op->bval.items[i], indent+4);
+            printf("IF\n");
+
+            print_indent(indent);
+            printf("    THEN:\n");
+            for(size_t i = 0; i < op->cval.then_body->bval.num_items; i++) {
+                uni_printOp(op->cval.then_body->bval.items[i], indent+4);
+            }
+
+            if(op->cval.else_body) {
+                print_indent(indent);
+                printf("    ELSE:\n");
+                for(size_t i = 0; i < op->cval.else_body->bval.num_items; i++) {
+                    uni_printOp(op->cval.else_body->bval.items[i], indent+4);
+                }
             }
         } break;
     }
