@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    uniEmitter* emitter = uni_createEmitter("out.ll");
+    uniEmitter* emitter = uni_createEmitter();
     if(!emitter) {
         fprintf(stderr, "[ERROR] Failed to create emitter...\n");
         uni_destroyOp(program);
@@ -61,6 +61,7 @@ int main(int argc, char** argv) {
     }
 
     uni_emitProgram(emitter, program);
+    uni_writeProgram(emitter, "out.ll");
     uni_destroyEmitter(emitter);
 
     if(args.output_file) {

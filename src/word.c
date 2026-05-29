@@ -46,102 +46,125 @@ uniWord* uni_lookupWord(const char* name, size_t len) {
 }
 
 void emit_add(uniEmitter* emitter) {
-    size_t b = uni_emitPop(emitter);
-    size_t a = uni_emitPop(emitter);
-    size_t r = uni_getFreshTemp(emitter);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
 
-    fprintf(emitter->out, "    %%%zu = add i64 %%%zu, %%%zu\n", r, a, b);
+    LLVMValueRef r = LLVMBuildAdd(emitter->builder, a, b, "add");
 
     uni_emitPush(emitter, r);
 }
 
 void emit_sub(uniEmitter* emitter) {
-    size_t b = uni_emitPop(emitter);
-    size_t a = uni_emitPop(emitter);
-    size_t r = uni_getFreshTemp(emitter);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
 
-    fprintf(emitter->out, "    %%%zu = sub i64 %%%zu, %%%zu\n", r, a, b);
+    LLVMValueRef r = LLVMBuildSub(emitter->builder, a, b, "sub");
 
     uni_emitPush(emitter, r);
 }
 
 void emit_mult(uniEmitter* emitter) {
-    size_t b = uni_emitPop(emitter);
-    size_t a = uni_emitPop(emitter);
-    size_t r = uni_getFreshTemp(emitter);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
 
-    fprintf(emitter->out, "    %%%zu = mul i64 %%%zu, %%%zu\n", r, a, b);
+    LLVMValueRef r = LLVMBuildMul(emitter->builder, a, b, "mul");
 
     uni_emitPush(emitter, r);
 }
 
 void emit_div(uniEmitter* emitter) {
-    size_t b = uni_emitPop(emitter);
-    size_t a = uni_emitPop(emitter);
-    size_t r = uni_getFreshTemp(emitter);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
 
-    fprintf(emitter->out, "    %%%zu = sdiv i64 %%%zu, %%%zu\n", r, a, b);
+    LLVMValueRef r = LLVMBuildSDiv(emitter->builder, a, b, "div");
 
     uni_emitPush(emitter, r);
 }
 
 void emit_printi(uniEmitter* emitter) {
-    size_t a = uni_emitPop(emitter);
-    size_t r = uni_getFreshTemp(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
 
-    fprintf(
-        emitter->out, "    %%%zu = call i32 (ptr, ...) @printf(ptr @fmt_int, i64 %%%zu)\n",
-        r, a
+    LLVMValueRef zero = LLVMConstInt(
+        LLVMInt64TypeInContext(emitter->ctx),
+        0, false
+    );
+    LLVMValueRef indicies[] = {zero, zero};
+    LLVMValueRef ptr = LLVMBuildGEP2(
+        emitter->builder,
+        LLVMGlobalGetValueType(emitter->fmt_int),
+        emitter->fmt_int,
+        indicies, 2,
+        "strptr"
+    );
+
+    LLVMValueRef printf_args[] = {ptr, a};
+    LLVMBuildCall2(
+        emitter->builder,
+        emitter->printf_type,
+        emitter->printf_fn,
+        printf_args, 2,
+        "printi"
     );
 }
 
 void emit_prints(uniEmitter* emitter) {
-    size_t a = uni_emitPop(emitter);
-    size_t r = uni_getFreshTemp(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
 
-    fprintf(
-        emitter->out, "    %%%zu = call i32 (ptr, ...) @printf(ptr @fmt_str, ptr %%%zu)\n",
-        r, a
+    LLVMValueRef zero = LLVMConstInt(
+        LLVMInt64TypeInContext(emitter->ctx),
+        0, false
+    );
+    LLVMValueRef indicies[] = {zero, zero};
+    LLVMValueRef ptr = LLVMBuildGEP2(
+        emitter->builder,
+        LLVMGlobalGetValueType(emitter->fmt_str),
+        emitter->fmt_str,
+        indicies, 2,
+        "strptr"
+    );
+
+    LLVMValueRef printf_args[] = {ptr, a};
+    LLVMBuildCall2(
+        emitter->builder,
+        emitter->printf_type,
+        emitter->printf_fn,
+        printf_args, 2,
+        "prints"
     );
 }
 
-static void emit_icmp(uniEmitter* emitter, const char* pred) {
-    size_t b = uni_emitPop(emitter);
-    size_t a = uni_emitPop(emitter);
-    size_t cmp = uni_getFreshTemp(emitter);
-    size_t r = uni_getFreshTemp(emitter);
+static void emit_icmp(uniEmitter* emitter, LLVMIntPredicate pred) {
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
 
-    fprintf(
-        emitter->out,
-        "    %%%zu = icmp %s i64 %%%zu, %%%zu\n"
-        "    %%%zu = zext i1 %%%zu to i64\n",
-        cmp, pred, a, b,
-        r, cmp
+    LLVMValueRef boolean = LLVMBuildICmp(emitter->builder, pred, a, b, "cmp");
+    LLVMValueRef r = LLVMBuildZExt(
+        emitter->builder, boolean, LLVMInt64TypeInContext(emitter->ctx), "ext"
     );
 
     uni_emitPush(emitter, r);
 }
 
 void emit_eq(uniEmitter* emitter) {
-    emit_icmp(emitter, "eq");
+    emit_icmp(emitter, LLVMIntEQ);
 }
 
 void emit_neq(uniEmitter* emitter) {
-    emit_icmp(emitter, "ne");
+    emit_icmp(emitter, LLVMIntNE);
 }
 
 void emit_lt(uniEmitter* emitter) {
-    emit_icmp(emitter, "slt");
+    emit_icmp(emitter, LLVMIntSLT);
 }
 
 void emit_gt(uniEmitter* emitter) {
-    emit_icmp(emitter, "sgt");
+    emit_icmp(emitter, LLVMIntSGT);
 }
 
 void emit_le(uniEmitter* emitter) {
-    emit_icmp(emitter, "sle");
+    emit_icmp(emitter, LLVMIntSLE);
 }
 
 void emit_ge(uniEmitter* emitter) {
-    emit_icmp(emitter, "sge");
+    emit_icmp(emitter, LLVMIntSGE);
 }

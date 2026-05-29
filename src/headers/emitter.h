@@ -2,53 +2,61 @@
 #define UNI_EMITTER_H_INCLUDED_
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+
+#include <llvm-c/Core.h>
 
 #include "parser.h"
 #include "word.h"
 
 typedef struct uniEmitStack_t {
-    size_t* items;
+    LLVMValueRef* items;
     size_t count;
     size_t cap;
 } uniEmitStack;
 
 typedef struct uniEmitter_t {
-    FILE* out;
-    size_t tmp_counter;
-    size_t str_counter;
-    size_t if_counter;
+    LLVMContextRef ctx;
+    LLVMModuleRef module;
+    LLVMBuilderRef builder;
+    LLVMValueRef func;              // Current function
+
+    LLVMValueRef* str_globals;
+    size_t str_count;
+    size_t str_cap;
+
     uniEmitStack stack;
+
+    LLVMTypeRef printf_type;
+    LLVMValueRef printf_fn;         // Handle to extern printf
+    LLVMValueRef fmt_int, fmt_str;
 } uniEmitter;
 
-uniEmitter* uni_createEmitter(const char* out_path);
+uniEmitter* uni_createEmitter(void);
 void uni_destroyEmitter(uniEmitter* emitter);
+
+bool uni_writeProgram(uniEmitter* emitter, const char* out_path);
 
 void uni_emitOp(uniEmitter* emitter, uniOp* op);
 void uni_emitBlock(uniEmitter* emitter, uniOp* block);
 void uni_emitProgram(uniEmitter* emitter, uniOp* program);
 
-static inline bool uni_emitPush(uniEmitter* emitter, size_t temp) {
+static inline bool uni_emitPush(uniEmitter* emitter, LLVMValueRef val) {
     if(emitter->stack.count >= emitter->stack.cap) {
         size_t new_cap = (emitter->stack.cap == 0)? 8 : emitter->stack.cap * 2;
-        size_t* new_items = realloc(emitter->stack.items, new_cap * sizeof(size_t));
+        LLVMValueRef* new_items = realloc(emitter->stack.items, new_cap * sizeof(LLVMValueRef));
         if(!new_items) return false;
 
         emitter->stack.items = new_items;
         emitter->stack.cap = new_cap;
     }
 
-    emitter->stack.items[emitter->stack.count++] = temp;
+    emitter->stack.items[emitter->stack.count++] = val;
     return true;
 }
 
-static inline size_t uni_emitPop(uniEmitter* emitter) {
+static inline LLVMValueRef uni_emitPop(uniEmitter* emitter) {
     return emitter->stack.items[--emitter->stack.count];
-}
-
-static inline size_t uni_getFreshTemp(uniEmitter* emitter) {
-    return emitter->tmp_counter++;
 }
 
 #endif

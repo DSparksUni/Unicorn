@@ -1,7 +1,7 @@
-34 35 + printi
-489 69 - printi
-210 2 * printi
-276 4 / printi
+34 35 + printi "\n" prints
+489 69 - printi "\n" prints
+210 2 * printi "\n" prints
+276 4 / printi "\n" prints
 
 "Hello, world!\n" prints
 
