@@ -1,0 +1,2 @@
+1 if { "a\n" prints } else { "b\n" prints }
+0 if { "c\n" prints } else { "d\n" prints }

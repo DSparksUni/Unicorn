@@ -1,0 +1,10 @@
+1
+while { dup 3 <= } {
+    dup 2 == if {
+        "two\n" prints
+    } else {
+        dup printi "\n" prints
+    }
+    1 +
+}
+drop

@@ -1,0 +1,3 @@
+7 dup + printi "\n" prints
+1 2 swap printi "\n" prints drop
+1 2 over printi "\n" prints drop drop

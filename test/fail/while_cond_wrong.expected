@@ -1,0 +1,1 @@
+\[ERROR\] \(line [0-9]+\) 'while' condition block must leave exactly one int on the stack

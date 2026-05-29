@@ -34,6 +34,43 @@ llvm_map_components_to_libnames(llvm_libs
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${llvm_libs})
 
-
 add_sanitizers(${PROJECT_NAME})
 
+enable_testing()
+
+set(UNI_EXE $<TARGET_FILE:uni>)
+set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
+
+# --- Pass tests: compile + run, check stdout ---
+file(GLOB PASS_TESTS "${TEST_DIR}/pass/*.uni")
+foreach(UNI_FILE ${PASS_TESTS})
+    get_filename_component(TEST_NAME ${UNI_FILE} NAME_WE)
+    set(EXPECTED_FILE "${TEST_DIR}/pass/${TEST_NAME}.expected")
+    set(OUT_EXE "${CMAKE_BINARY_DIR}/test_${TEST_NAME}.exe")
+
+    add_test(
+        NAME "pass/${TEST_NAME}"
+        COMMAND ${CMAKE_COMMAND}
+            -DUNI_EXE=${UNI_EXE}
+            -DUNI_FILE=${UNI_FILE}
+            -DOUT_EXE=${OUT_EXE}
+            -DEXPECTED_FILE=${EXPECTED_FILE}
+            -P ${TEST_DIR}/run_pass.cmake
+    )
+endforeach()
+
+# --- Fail tests: compile, check it fails + stderr contains expected substring ---
+file(GLOB FAIL_TESTS "${TEST_DIR}/fail/*.uni")
+foreach(UNI_FILE ${FAIL_TESTS})
+    get_filename_component(TEST_NAME ${UNI_FILE} NAME_WE)
+    set(EXPECTED_FILE "${TEST_DIR}/fail/${TEST_NAME}.expected")
+
+    add_test(
+        NAME "fail/${TEST_NAME}"
+        COMMAND ${CMAKE_COMMAND}
+            -DUNI_EXE=${UNI_EXE}
+            -DUNI_FILE=${UNI_FILE}
+            -DEXPECTED_FILE=${EXPECTED_FILE}
+            -P ${TEST_DIR}/run_fail.cmake
+    )
+endforeach()
