@@ -1,11 +1,15 @@
 #include "headers/typecheck.h"
 #include <stdio.h>
 
-static char* type_name(uniType type) {
-    switch(type) {
-        case UNI_TYPE_INT: return "int";
-        case UNI_TYPE_STRING: return "string";
+static char* kind_name(uniTypeKind kind) {
+    switch(kind) {
+        case UNI_KIND_INT: return "int";
+        case UNI_KIND_STRING: return "string";
+        case UNI_KIND_VAR: return "var";
     }
+}
+static char* type_name(uniType type) {
+    return kind_name(type.kind);
 }
 
 static bool tc_push(uniTypeStack* stack, uniType type) {
@@ -22,19 +26,87 @@ static bool tc_push(uniTypeStack* stack, uniType type) {
     return true;
 }
 
-static bool tc_pop(uniTypeStack* stack, uniType expected, size_t line) {
-    if(stack->count == 0) {
-        fprintf(stderr, "[ERROR] (line %zu) stack underflow\n", line);
+static uniType tc_pop_raw(uniTypeStack* stack) {
+    return stack->items[--stack->count];
+}
+
+#define MAX_VARS 24
+
+static bool tc_apply_word(
+    uniTypeStack* stack,
+    uniType* inputs, size_t num_inputs,
+    uniType* outputs, size_t num_outputs,
+    size_t line,
+    const char* word_name
+) {
+    if(stack->count < num_inputs) {
+        fprintf(
+            stderr, "[ERROR] (line %zu) '%s' needs %zu value(s) but stack only has %zu\n",
+            line, word_name, num_inputs, stack->count
+        );
         return false;
     }
 
-    uniType type = stack->items[--stack->count];
-    if(type != expected) {
-        fprintf(
-            stderr, "[ERROR] (line %zu) type error: expected type %s, got %s\n",
-            line, type_name(expected), type_name(type)
-        );
-        return false;
+    uniType bindings[MAX_VARS];
+    bool bound[MAX_VARS];
+    memset(bound, 0, sizeof(bound));
+
+    for(size_t i = 0; i < num_inputs; i++) {
+        size_t stack_idx = stack->count - 1 - i;
+        uniType actual = stack->items[stack_idx];
+        uniType expected = inputs[num_inputs - 1 - i];
+
+        if(expected.kind == UNI_KIND_VAR) {
+            uint8_t vid = expected.var_id;
+            if(!bound[vid]) {
+                bindings[vid] = actual;
+                bound[vid] = true;
+            } else {
+                if(actual.kind != bindings[vid].kind) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) '%s' type mismatch: "
+                        "type variable '%c' was bound to %s but got %s\n",
+                        line, word_name,
+                        'A' + vid, type_name(bindings[vid]), type_name(actual)
+                    );
+                    return false;
+                }
+            }
+        } else {
+            if(actual.kind != expected.kind) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) '%s' type mismatch: "
+                    "expected %s but got %s\n",
+                    line, word_name,
+                    type_name(expected), type_name(actual)
+                );
+                return false;
+            }
+        }
+    }
+
+    stack->count -= num_inputs;
+
+    for(size_t i = 0; i < num_outputs; i++) {
+        uniType out = outputs[i];
+        if(out.kind == UNI_KIND_VAR) {
+            uint8_t vid = out.var_id;
+            if(!bound[vid]) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) '%s' output type variable '%c' is unbound "
+                    "(word definition error)",
+                    line, word_name, 'A' + vid
+                );
+                return false;
+            }
+
+            out = bindings[vid];
+        }
+
+        if(!tc_push(stack, out)) return false;
     }
 
     return true;
@@ -57,14 +129,13 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
                 return false;
             }
 
-            for(size_t i = 0; i < word->num_inputs; i++) {
-                if(!tc_pop(stack, word->inputs[word->num_inputs - 1 - i], op->line)) return false;
-            }
-            for(size_t i = 0; i < word->num_outputs; i++) {
-                if(!tc_push(stack, word->outputs[i])) return false;
-            }
-
-            return true;
+            return tc_apply_word(
+                stack,
+                word->inputs, word->num_inputs,
+                word->outputs, word->num_outputs,
+                op->line,
+                word->name
+            );
         };
 
         case UNI_OP_BLOCK: {
@@ -72,7 +143,24 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
         }
 
         case UNI_OP_IF: {
-            if(!tc_pop(stack, UNI_TYPE_INT, op->line)) return false;
+            if(stack->count == 0) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) 'if' needs a condition but stack is empty\n",
+                    op->line
+                );
+                return false;
+            }
+
+            uniType cond = tc_pop_raw(stack);
+            if(cond.kind != UNI_KIND_INT) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) 'if' condition must be int, got %s\n",
+                    op->line, type_name(cond)
+                );
+                return false;
+            }
 
             #define CLONE_STACK(dst, src)                                           \
                 uniTypeStack dst = {0};                                             \
@@ -132,7 +220,7 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
             }
 
             for(size_t i = 0; i < then_stack.count; i++) {
-                if(then_stack.items[i] != else_stack.items[i]) {
+                if(then_stack.items[i].kind != else_stack.items[i].kind) {
                     fprintf(
                         stderr,
                         "[ERROR] (line %zu) 'if/else' branch produce different types at stack position %zu: "

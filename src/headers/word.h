@@ -7,10 +7,20 @@
 
 struct uniEmitter_t;
 
-typedef enum uniType_t {
-    UNI_TYPE_INT,
-    UNI_TYPE_STRING
+typedef enum uniTypeKind_t {
+    UNI_KIND_INT,
+    UNI_KIND_STRING,
+    UNI_KIND_VAR
+} uniTypeKind;
+
+typedef struct uniType_t {
+    uniTypeKind kind;
+    uint8_t var_id;
 } uniType;
+
+#define UNI_TYPE_INT ((uniType){UNI_KIND_INT, 0})
+#define UNI_TYPE_STRING ((uniType){UNI_KIND_STRING, 0})
+#define UNI_TYPE_VAR(id) ((uniType){UNI_KIND_VAR, (id)})
 
 typedef struct uniWord_t {
     const char* name;

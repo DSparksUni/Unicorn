@@ -2,6 +2,7 @@
 489 69 - printi "\n" prints
 210 2 * printi "\n" prints
 276 4 / printi "\n" prints
+69 dup printi " " prints printi "\n" prints
 
 "Hello, world!\n" prints
 

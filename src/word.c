@@ -13,12 +13,22 @@ void emit_lt(uniEmitter* emitter);
 void emit_gt(uniEmitter* emitter);
 void emit_le(uniEmitter* emitter);
 void emit_ge(uniEmitter* emitter);
+void emit_dup(uniEmitter* emitter);
+void emit_drop(uniEmitter* emitter);
+void emit_swap(uniEmitter* emitter);
+void emit_over(uniEmitter* emitter);
 
 static uniType INT1[] = { UNI_TYPE_INT };
 static uniType INT2[] = { UNI_TYPE_INT, UNI_TYPE_INT };
 static uniType STR1[] = { UNI_TYPE_STRING };
 
-#define NUM_WORDS 12
+static uniType VAR_A[] = { UNI_TYPE_VAR(0) };
+static uniType VAR_AA[] = { UNI_TYPE_VAR(0), UNI_TYPE_VAR(0) };
+static uniType VAR_AB[] = { UNI_TYPE_VAR(0), UNI_TYPE_VAR(1) };
+static uniType VAR_BA[] = { UNI_TYPE_VAR(1), UNI_TYPE_VAR(0) };
+static uniType VAR_ABA[] = { UNI_TYPE_VAR(0), UNI_TYPE_VAR(1), UNI_TYPE_VAR(0) };
+
+#define NUM_WORDS 16
 static uniWord WORDS[NUM_WORDS] = {
     {"+", INT2, 2, INT1, 1, emit_add},
     {"-", INT2, 2, INT1, 1, emit_sub},
@@ -32,6 +42,10 @@ static uniWord WORDS[NUM_WORDS] = {
     {">", INT2, 2, INT1, 1, emit_gt},
     {"<=", INT2, 2, INT1, 1, emit_le},
     {">=", INT2, 2, INT1, 1, emit_ge},
+    {"dup", VAR_A, 1, VAR_AA, 2, emit_dup},
+    {"drop", VAR_A, 1, NULL, 0, emit_drop},
+    {"swap", VAR_AB, 2, VAR_BA, 2, emit_swap},
+    {"over", VAR_AB, 2, VAR_ABA, 3, emit_over},
 };
 
 uniWord* uni_lookupWord(const char* name, size_t len) {
@@ -167,4 +181,32 @@ void emit_le(uniEmitter* emitter) {
 
 void emit_ge(uniEmitter* emitter) {
     emit_icmp(emitter, LLVMIntSGE);
+}
+
+void emit_dup(uniEmitter* emitter) {
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    uni_emitPush(emitter, a);
+    uni_emitPush(emitter, a);
+}
+
+void emit_drop(uniEmitter* emitter) {
+    uni_emitPop(emitter);
+}
+
+void emit_swap(uniEmitter* emitter) {
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    uni_emitPush(emitter, b);
+    uni_emitPush(emitter, a);
+}
+
+void emit_over(uniEmitter* emitter) {
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    uni_emitPush(emitter, a);
+    uni_emitPush(emitter, b);
+    uni_emitPush(emitter, a);
 }
