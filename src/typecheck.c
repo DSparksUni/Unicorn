@@ -242,6 +242,47 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
 
             free(else_stack.items);
             return true;
+        }
+
+        case UNI_OP_WHILE: {
+            CLONE_STACK(cond_stack, stack);
+            if(!tc_block(&cond_stack, op->wval.cond_body)) {
+                free(cond_stack.items);
+                return false;
+            }
+
+            if(
+                cond_stack.count != stack->count + 1 ||
+                cond_stack.items[cond_stack.count-1].kind != UNI_KIND_INT
+            ) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) 'while' condition block must leave exactly one int on the stack\n",
+                    op->line
+                );
+                free(cond_stack.items);
+                return false;
+            }
+            free(cond_stack.items);
+
+            CLONE_STACK(body_stack, stack);
+            if(!tc_block(&body_stack, op->wval.loop_body)) {
+                free(body_stack.items);
+                return false;
+            }
+
+            if(body_stack.count != stack->count) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) 'while' body must be stack-neutral\n",
+                    op->line
+                );
+                free(body_stack.items);
+                return false;
+            }
+
+            free(body_stack.items);
+            return true;
 
             #undef CLONE_STACK
         }

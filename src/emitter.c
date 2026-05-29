@@ -184,6 +184,56 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
 
             free(then_results);
         } break;
+
+        case UNI_OP_WHILE: {
+            LLVMBasicBlockRef pre_block = LLVMGetInsertBlock(emitter->builder);
+            LLVMBasicBlockRef cond_block = LLVMAppendBasicBlockInContext(
+                emitter->ctx, emitter->func, "while_cond"
+            );
+            LLVMBasicBlockRef body_block = LLVMAppendBasicBlockInContext(
+                emitter->ctx, emitter->func, "while_body"
+            );
+            LLVMBasicBlockRef end_block = LLVMAppendBasicBlockInContext(
+                emitter->ctx, emitter->func, "while_end"
+            );
+
+            LLVMBuildBr(emitter->builder, cond_block);
+            LLVMPositionBuilderAtEnd(emitter->builder, cond_block);
+
+            size_t stack_base = emitter->stack.count;
+            LLVMValueRef* phis = malloc(stack_base * sizeof(LLVMValueRef));
+            if(!phis && stack_base > 0) return;
+            for(size_t i = 0; i < stack_base; i++) {
+                LLVMValueRef phi = LLVMBuildPhi(
+                    emitter->builder, LLVMTypeOf(emitter->stack.items[i]), "loop-var"
+                );
+                LLVMAddIncoming(phi, &emitter->stack.items[i], &pre_block, 1);
+                phis[i] = phi;
+                emitter->stack.items[i] = phi;
+            }
+
+            uni_emitBlock(emitter, op->wval.cond_body);
+            LLVMValueRef cond_val = uni_emitPop(emitter);
+            LLVMValueRef cond_bool = LLVMBuildICmp(
+                emitter->builder, LLVMIntNE,
+                cond_val,
+                LLVMConstInt(LLVMInt64TypeInContext(emitter->ctx), 0, false),
+                "while_cond_bool"
+            );
+            LLVMBuildCondBr(emitter->builder, cond_bool, body_block, end_block);
+
+            LLVMPositionBuilderAtEnd(emitter->builder, body_block);
+            uni_emitBlock(emitter, op->wval.loop_body);
+
+            LLVMBasicBlockRef body_end = LLVMGetInsertBlock(emitter->builder);
+            for(size_t i = 0; i < stack_base; i++) {
+                LLVMAddIncoming(phis[i], &emitter->stack.items[i], &body_end, 1);
+            }
+            LLVMBuildBr(emitter->builder, cond_block);
+
+            free(phis);
+            LLVMPositionBuilderAtEnd(emitter->builder, end_block);
+        } break;
     }
 }
 
@@ -256,6 +306,11 @@ static void collect_strings(uniEmitter* emitter, uniOp* op) {
         case UNI_OP_IF: {
             collect_strings(emitter, op->cval.then_body);
             if(op->cval.else_body) collect_strings(emitter, op->cval.else_body);
+        } break;
+
+        case UNI_OP_WHILE: {
+            collect_strings(emitter, op->wval.cond_body);
+            collect_strings(emitter, op->wval.loop_body);
         } break;
 
         default: break;

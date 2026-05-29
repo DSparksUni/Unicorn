@@ -126,6 +126,51 @@ uniOp* uni_parseOne(uniParser* parser) {
                 return op;
             }
 
+            if(tok.len == 5 && strncmp(tok.start, "while", 5) == 0) {
+                if(uni_peekParser(parser).type != UNI_TOKEN_LBRACE) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) 'while' must be followed by a condition block\n",
+                        tok.line
+                    );
+                    return NULL;
+                }
+
+                uni_advanceParser(parser);
+                uniOp* cond_body = uni_parseBlock(parser);
+                if(!cond_body) return NULL;
+
+                if(uni_peekParser(parser).type != UNI_TOKEN_LBRACE) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) 'while' condition block must be followed by a body block\n",
+                        tok.line
+                    );
+                    return NULL;
+                }
+
+                uni_advanceParser(parser);
+                uniOp* loop_body = uni_parseBlock(parser);
+                if(!loop_body) {
+                    uni_destroyOp(cond_body);
+                    return NULL;
+                }
+
+                uniOp* op = malloc(sizeof(uniOp));
+                if(!op) {
+                    uni_destroyOp(cond_body);
+                    uni_destroyOp(loop_body);
+                    return NULL;
+                }
+
+                op->type = UNI_OP_WHILE;
+                op->line = tok.line;
+                op->wval.cond_body = cond_body;
+                op->wval.loop_body = loop_body;
+
+                return op;
+            }
+
             uniOp* op = malloc(sizeof(uniOp));
             if(!op) return NULL;
 
@@ -242,6 +287,21 @@ void uni_printOp(uniOp* op, size_t indent) {
                 }
             }
         } break;
+
+        case UNI_OP_WHILE: {
+            printf("WHILE\n");
+
+            print_indent(indent);
+            printf("    COND:\n");
+            for(size_t i = 0; i < op->wval.cond_body->bval.num_items; i++) {
+                uni_printOp(op->wval.cond_body->bval.items[i], indent+4);
+            }
+
+            printf("    LOOP:\n");
+            for(size_t i = 0; i < op->wval.loop_body->bval.num_items; i++) {
+                uni_printOp(op->wval.loop_body->bval.items[i], indent+4);
+            }
+        } break;
     }
 }
 
@@ -250,6 +310,12 @@ void uni_destroyOp(uniOp* op) {
         for(size_t i = 0; i < op->bval.num_items; i++)
             uni_destroyOp(op->bval.items[i]);
         free(op->bval.items);
+    } else if(op->type == UNI_OP_IF) {
+        uni_destroyOp(op->cval.then_body);
+        if(op->cval.else_body) uni_destroyOp(op->cval.else_body);
+    } else if(op->type == UNI_OP_WHILE) {
+        uni_destroyOp(op->wval.cond_body);
+        uni_destroyOp(op->wval.loop_body);
     }
 
     free(op);
