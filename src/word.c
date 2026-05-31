@@ -30,23 +30,40 @@ static uniType VAR_ABA[] = { UNI_TYPE_VAR(0), UNI_TYPE_VAR(1), UNI_TYPE_VAR(0) }
 
 #define NUM_WORDS 16
 static uniWord WORDS[NUM_WORDS] = {
-    {"+", INT2, 2, INT1, 1, emit_add},
-    {"-", INT2, 2, INT1, 1, emit_sub},
-    {"*", INT2, 2, INT1, 1, emit_mult},
-    {"/", INT2, 2, INT1, 1, emit_div},
-    {"printi", INT1, 1, NULL, 0, emit_printi},
-    {"prints", STR1, 1, NULL, 0, emit_prints},
-    {"==", INT2, 2, INT1, 1, emit_eq},
-    {"!=", INT2, 2, INT1, 1, emit_neq},
-    {"<", INT2, 2, INT1, 1, emit_lt},
-    {">", INT2, 2, INT1, 1, emit_gt},
-    {"<=", INT2, 2, INT1, 1, emit_le},
-    {">=", INT2, 2, INT1, 1, emit_ge},
-    {"dup", VAR_A, 1, VAR_AA, 2, emit_dup},
-    {"drop", VAR_A, 1, NULL, 0, emit_drop},
-    {"swap", VAR_AB, 2, VAR_BA, 2, emit_swap},
-    {"over", VAR_AB, 2, VAR_ABA, 3, emit_over},
+    {"+", INT2, 2, INT1, 1, emit_add, NULL},
+    {"-", INT2, 2, INT1, 1, emit_sub, NULL},
+    {"*", INT2, 2, INT1, 1, emit_mult, NULL},
+    {"/", INT2, 2, INT1, 1, emit_div, NULL},
+    {"printi", INT1, 1, NULL, 0, emit_printi, NULL},
+    {"prints", STR1, 1, NULL, 0, emit_prints, NULL},
+    {"==", INT2, 2, INT1, 1, emit_eq, NULL},
+    {"!=", INT2, 2, INT1, 1, emit_neq, NULL},
+    {"<", INT2, 2, INT1, 1, emit_lt, NULL},
+    {">", INT2, 2, INT1, 1, emit_gt, NULL},
+    {"<=", INT2, 2, INT1, 1, emit_le, NULL},
+    {">=", INT2, 2, INT1, 1, emit_ge, NULL},
+    {"dup", VAR_A, 1, VAR_AA, 2, emit_dup, NULL},
+    {"drop", VAR_A, 1, NULL, 0, emit_drop, NULL},
+    {"swap", VAR_AB, 2, VAR_BA, 2, emit_swap, NULL},
+    {"over", VAR_AB, 2, VAR_ABA, 3, emit_over, NULL},
 };
+
+static size_t NUM_CUSTOM_WORDS = 0;
+static size_t CUSTOM_WORD_CAP = 0;
+static uniWord* CUSTOM_WORDS = NULL;
+
+void uni_registerWord(uniWord word) {
+    if(NUM_CUSTOM_WORDS >= CUSTOM_WORD_CAP) {
+        size_t new_cap = (CUSTOM_WORD_CAP == 0)? 8 : CUSTOM_WORD_CAP * 2;
+        uniWord* new_words = realloc(CUSTOM_WORDS, new_cap * sizeof(uniWord));
+        if(!new_words) return;
+
+        CUSTOM_WORD_CAP = new_cap;
+        CUSTOM_WORDS = new_words;
+    }
+
+    CUSTOM_WORDS[NUM_CUSTOM_WORDS++] = word;
+}
 
 uniWord* uni_lookupWord(const char* name, size_t len) {
     for(size_t i = 0; i < NUM_WORDS; i++) {
@@ -56,7 +73,26 @@ uniWord* uni_lookupWord(const char* name, size_t len) {
         ) return &WORDS[i];
     }
 
+    for(size_t i = 0; i < NUM_CUSTOM_WORDS; i++) {
+        if(
+            strlen(CUSTOM_WORDS[i].name) == len &&
+            strncmp(CUSTOM_WORDS[i].name, name, len) == 0
+        ) return &CUSTOM_WORDS[i];
+    }
+
     return NULL;
+}
+
+void uni_cleanupWords(void) {
+    for(size_t i = 0; i < NUM_CUSTOM_WORDS; i++) {
+        uniWord* word = &CUSTOM_WORDS[i];
+
+        free(word->name);
+        free(word->inputs);
+        free(word->outputs);
+    }
+
+    free(CUSTOM_WORDS);
 }
 
 void emit_add(uniEmitter* emitter) {

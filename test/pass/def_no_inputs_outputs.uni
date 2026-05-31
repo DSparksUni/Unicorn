@@ -1,0 +1,2 @@
+def greet { "Hello\n" prints }
+greet greet

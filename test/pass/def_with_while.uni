@@ -1,0 +1,8 @@
+def countdown {
+    while { dup 0 > } {
+        dup printi "\n" prints
+        1 -
+    }
+    drop
+}
+5 countdown

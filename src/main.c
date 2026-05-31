@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
     }
 
     if(!uni_typecheck(program)) {
+        uni_cleanupWords();
         uni_destroyParser(parser);
         free(content);
         return -1;
@@ -54,6 +55,7 @@ int main(int argc, char** argv) {
     uniEmitter* emitter = uni_createEmitter();
     if(!emitter) {
         fprintf(stderr, "[ERROR] Failed to create emitter...\n");
+        uni_cleanupWords();
         uni_destroyOp(program);
         uni_destroyParser(parser);
         free(content);
@@ -73,6 +75,7 @@ int main(int argc, char** argv) {
     }
     remove("out.ll");
 
+    uni_cleanupWords();
     uni_destroyOp(program);
     uni_destroyParser(parser);
     free(content);

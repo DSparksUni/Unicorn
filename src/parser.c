@@ -135,8 +135,8 @@ uniOp* uni_parseOne(uniParser* parser) {
                     );
                     return NULL;
                 }
-
                 uni_advanceParser(parser);
+
                 uniOp* cond_body = uni_parseBlock(parser);
                 if(!cond_body) return NULL;
 
@@ -148,8 +148,8 @@ uniOp* uni_parseOne(uniParser* parser) {
                     );
                     return NULL;
                 }
-
                 uni_advanceParser(parser);
+
                 uniOp* loop_body = uni_parseBlock(parser);
                 if(!loop_body) {
                     uni_destroyOp(cond_body);
@@ -167,6 +167,46 @@ uniOp* uni_parseOne(uniParser* parser) {
                 op->line = tok.line;
                 op->wval.cond_body = cond_body;
                 op->wval.loop_body = loop_body;
+
+                return op;
+            }
+
+            if(tok.len == 3 && strncmp(tok.start, "def", 3) == 0) {
+                if(uni_peekParser(parser).type != UNI_TOKEN_WORD) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) 'def' must be followed by the word's name\n",
+                        tok.line
+                    );
+                    return NULL;
+                }
+
+                uniToken name_tok = uni_advanceParser(parser);
+
+                if(uni_peekParser(parser).type != UNI_TOKEN_LBRACE) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) 'def' names must be followed by a block\n",
+                        tok.line
+                    );
+                    return NULL;
+                }
+                uni_advanceParser(parser);
+
+                uniOp* body = uni_parseBlock(parser);
+                if(!body) return NULL;
+
+                uniOp* op = malloc(sizeof(uniOp));
+                if(!op) {
+                    uni_destroyOp(body);
+                    return NULL;
+                }
+
+                op->type = UNI_OP_DEF;
+                op->line = tok.line;
+                op->dval.name = name_tok.start;
+                op->dval.name_len = name_tok.len;
+                op->dval.body = body;
 
                 return op;
             }
@@ -302,6 +342,13 @@ void uni_printOp(uniOp* op, size_t indent) {
                 uni_printOp(op->wval.loop_body->bval.items[i], indent+4);
             }
         } break;
+
+        case UNI_OP_DEF: {
+            printf("DEF (%.*s)\n", (int)op->dval.name_len, op->dval.name);
+            for(size_t i = 0; i < op->dval.body->bval.num_items; i++) {
+                uni_printOp(op->dval.body->bval.items[i], indent+4);
+            }
+        } break;
     }
 }
 
@@ -316,6 +363,8 @@ void uni_destroyOp(uniOp* op) {
     } else if(op->type == UNI_OP_WHILE) {
         uni_destroyOp(op->wval.cond_body);
         uni_destroyOp(op->wval.loop_body);
+    } else if(op->type == UNI_OP_DEF) {
+        uni_destroyOp(op->dval.body);
     }
 
     free(op);

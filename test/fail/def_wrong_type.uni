@@ -1,3 +1,2 @@
 def square { dup * }
-
-"Hello" square
+"Hello\n" square

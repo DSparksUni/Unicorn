@@ -1,0 +1,3 @@
+def nested {
+    def bad { "Nested Definition" }
+}

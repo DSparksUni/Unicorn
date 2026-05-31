@@ -86,7 +86,9 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
 
         case UNI_OP_WORD: {
             uniWord* word = uni_lookupWord(op->sval.start, op->sval.len);
-            if(word) {
+            if(word && word->body) {
+                uni_emitBlock(emitter, word->body);
+            } else if(word) {
                 word->emit(emitter);
             } else {
                 // Unknown words should've been caught in typechecking
@@ -97,9 +99,7 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
             }
         } break;
 
-        case UNI_OP_BLOCK: {
-            // TODO: blocks
-        } break;
+        case UNI_OP_BLOCK: break;
 
         case UNI_OP_IF: {
             LLVMValueRef cond = uni_emitPop(emitter);
@@ -127,62 +127,90 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
                 LLVMBuildCondBr(emitter->builder, cond_bool, then_block, end_block);
             }
 
+            // Snapshot current stack slots — the then-branch may clobber
+            // items below stack_depth_before even when stack-neutral.
             size_t stack_depth_before = emitter->stack.count;
+            LLVMValueRef* pre_vals = NULL;
+            if(stack_depth_before > 0) {
+                pre_vals = malloc(stack_depth_before * sizeof(LLVMValueRef));
+                if(pre_vals)
+                    memcpy(pre_vals, emitter->stack.items, stack_depth_before * sizeof(LLVMValueRef));
+            }
+            LLVMBasicBlockRef pre_block = LLVMGetInsertBlock(emitter->builder);
 
             LLVMPositionBuilderAtEnd(emitter->builder, then_block);
             uni_emitBlock(emitter, op->cval.then_body);
             LLVMBuildBr(emitter->builder, end_block);
 
-            size_t num_results = emitter->stack.count - stack_depth_before;
-            LLVMValueRef* then_results = NULL;
-            if(num_results > 0) {
-                then_results = malloc(num_results * sizeof(LLVMValueRef));
-                if(then_results) {
-                    for(size_t i = 0; i < num_results; i++) {
-                        then_results[i] = emitter->stack.items[stack_depth_before + i];
-                    }
-                    emitter->stack.count = stack_depth_before;
-                }
+            // Capture the full stack state after the then-branch.
+            size_t then_stack_count = emitter->stack.count;
+            LLVMValueRef* then_vals = NULL;
+            if(then_stack_count > 0) {
+                then_vals = malloc(then_stack_count * sizeof(LLVMValueRef));
+                if(then_vals)
+                    memcpy(then_vals, emitter->stack.items, then_stack_count * sizeof(LLVMValueRef));
             }
 
             if(op->cval.else_body) {
+                // Restore stack to pre-branch state before running else.
+                emitter->stack.count = stack_depth_before;
+                if(pre_vals)
+                    memcpy(emitter->stack.items, pre_vals, stack_depth_before * sizeof(LLVMValueRef));
+
                 LLVMPositionBuilderAtEnd(emitter->builder, else_block);
                 uni_emitBlock(emitter, op->cval.else_body);
                 LLVMBuildBr(emitter->builder, end_block);
 
-                LLVMValueRef* else_results = NULL;
-                if(num_results > 0) {
-                    else_results = malloc(num_results * sizeof(LLVMValueRef));
-                    if(else_results) {
-                        for(size_t i = 0; i < num_results; i++) {
-                            else_results[i] = emitter->stack.items[stack_depth_before + i];
-                        }
-                        emitter->stack.count = stack_depth_before;
-                    }
+                size_t else_stack_count = emitter->stack.count;
+                LLVMValueRef* else_vals = NULL;
+                if(else_stack_count > 0) {
+                    else_vals = malloc(else_stack_count * sizeof(LLVMValueRef));
+                    if(else_vals)
+                        memcpy(else_vals, emitter->stack.items, else_stack_count * sizeof(LLVMValueRef));
                 }
 
                 LLVMPositionBuilderAtEnd(emitter->builder, end_block);
 
-                if(then_results && else_results) {
-                    for(size_t i = 0; i < num_results; i++) {
+                emitter->stack.count = 0;
+                if(then_vals && else_vals) {
+                    for(size_t i = 0; i < then_stack_count; i++) {
                         LLVMValueRef phi = LLVMBuildPhi(
                             emitter->builder,
                             LLVMInt64TypeInContext(emitter->ctx),
                             "phi"
                         );
-                        LLVMValueRef incoming_vals[] = {then_results[i], else_results[i]};
+                        LLVMValueRef incoming_vals[] = {then_vals[i], else_vals[i]};
                         LLVMBasicBlockRef incoming_blocks[] = {then_block, else_block};
                         LLVMAddIncoming(phi, incoming_vals, incoming_blocks, 2);
                         uni_emitPush(emitter, phi);
                     }
-
-                    free(else_results);
                 }
-            } else { 
+
+                free(else_vals);
+            } else {
+                // No else: stack-neutral, but slots may have been clobbered.
+                // Emit PHIs for every slot so the no-branch path keeps pre_vals.
                 LLVMPositionBuilderAtEnd(emitter->builder, end_block);
+
+                emitter->stack.count = 0;
+                for(size_t i = 0; i < stack_depth_before; i++) {
+                    LLVMValueRef phi = LLVMBuildPhi(
+                        emitter->builder,
+                        LLVMInt64TypeInContext(emitter->ctx),
+                        "phi"
+                    );
+                    LLVMValueRef incoming_vals[] = {
+                        then_vals ? then_vals[i] : pre_vals[i],
+                        pre_vals[i]
+                    };
+                    LLVMBasicBlockRef incoming_blocks[] = {then_block, pre_block};
+                    LLVMAddIncoming(phi, incoming_vals, incoming_blocks, 2);
+                    uni_emitPush(emitter, phi);
+                }
             }
 
-            free(then_results);
+            free(then_vals);
+            free(pre_vals);
         } break;
 
         case UNI_OP_WHILE: {
@@ -234,6 +262,8 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
             free(phis);
             LLVMPositionBuilderAtEnd(emitter->builder, end_block);
         } break;
+
+        case UNI_OP_DEF: break;
     }
 }
 
@@ -311,6 +341,10 @@ static void collect_strings(uniEmitter* emitter, uniOp* op) {
         case UNI_OP_WHILE: {
             collect_strings(emitter, op->wval.cond_body);
             collect_strings(emitter, op->wval.loop_body);
+        } break;
+
+        case UNI_OP_DEF: {
+            collect_strings(emitter, op->dval.body);
         } break;
 
         default: break;

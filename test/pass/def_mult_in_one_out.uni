@@ -1,0 +1,3 @@
+def my_add { + }
+1 1 my_add printi "\n" prints
+1 2 my_add printi "\n" prints

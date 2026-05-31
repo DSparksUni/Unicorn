@@ -30,30 +30,43 @@ static uniType tc_pop_raw(uniTypeStack* stack) {
     return stack->items[--stack->count];
 }
 
-#define MAX_VARS 24
+static uniType tc_pop_underflow(uniTypeStack* stack, size_t* var_counter) {
+    if(stack->count > 0) return tc_pop_raw(stack);
+    else {
+        return UNI_TYPE_VAR((*var_counter)++);
+    }
+}
+
+static uniType tc_pop(uniTcContext* ctx) {
+    if(ctx->var_counter) {
+        return tc_pop_underflow(&ctx->stack, ctx->var_counter);
+    }
+    return tc_pop_raw(&ctx->stack);
+}
+
 
 static bool tc_apply_word(
-    uniTypeStack* stack,
+    uniTcContext* ctx,
     uniType* inputs, size_t num_inputs,
     uniType* outputs, size_t num_outputs,
     size_t line,
     const char* word_name
 ) {
-    if(stack->count < num_inputs) {
+    if(!ctx->var_counter && ctx->stack.count < num_inputs) {
         fprintf(
             stderr, "[ERROR] (line %zu) '%s' needs %zu value(s) but stack only has %zu\n",
-            line, word_name, num_inputs, stack->count
+            line, word_name, num_inputs, ctx->stack.count
         );
         return false;
     }
 
-    uniType bindings[MAX_VARS];
-    bool bound[MAX_VARS];
+    uniType bindings[UNI_MAX_VARS];
+    bool bound[UNI_MAX_VARS];
     memset(bound, 0, sizeof(bound));
 
+    size_t external_bindings = 0;
     for(size_t i = 0; i < num_inputs; i++) {
-        size_t stack_idx = stack->count - 1 - i;
-        uniType actual = stack->items[stack_idx];
+        uniType actual = tc_pop(ctx);
         uniType expected = inputs[num_inputs - 1 - i];
 
         if(expected.kind == UNI_KIND_VAR) {
@@ -73,6 +86,28 @@ static bool tc_apply_word(
                     return false;
                 }
             }
+        } else if(actual.kind == UNI_KIND_VAR) {
+            uint8_t vid = actual.var_id;
+            if(!bound[vid] && expected.kind != UNI_KIND_VAR) {
+                bindings[vid] = expected;
+                ctx->var_bindings[external_bindings] = expected;
+
+                bound[vid] = true;
+                ctx->var_bound[external_bindings] = true;
+
+                external_bindings++;
+            } else {
+                if(expected.kind != bindings[vid].kind) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) '%s' type mismatch: "
+                        "expected %s but got %s\n",
+                        line, word_name,
+                        type_name(expected), type_name(bindings[vid])
+                    );
+                    return false;
+                }
+            }
         } else {
             if(actual.kind != expected.kind) {
                 fprintf(
@@ -86,8 +121,6 @@ static bool tc_apply_word(
             }
         }
     }
-
-    stack->count -= num_inputs;
 
     for(size_t i = 0; i < num_outputs; i++) {
         uniType out = outputs[i];
@@ -106,18 +139,18 @@ static bool tc_apply_word(
             out = bindings[vid];
         }
 
-        if(!tc_push(stack, out)) return false;
+        if(!tc_push(&ctx->stack, out)) return false;
     }
 
     return true;
 }
 
-static bool tc_block(uniTypeStack* stack, uniOp* block);
+static bool tc_block(uniTcContext* ctx, uniOp* block);
 
-static bool tc_op(uniTypeStack* stack, uniOp* op) {
+static bool tc_op(uniTcContext* ctx, uniOp* op) {
     switch(op->type) {
-        case UNI_OP_PUSH_INT: return tc_push(stack, UNI_TYPE_INT);
-        case UNI_OP_PUSH_STR: return tc_push(stack, UNI_TYPE_STRING);
+        case UNI_OP_PUSH_INT: return tc_push(&ctx->stack, UNI_TYPE_INT);
+        case UNI_OP_PUSH_STR: return tc_push(&ctx->stack, UNI_TYPE_STRING);
 
         case UNI_OP_WORD: {
             uniWord* word = uni_lookupWord(op->sval.start, op->sval.len);
@@ -130,7 +163,7 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
             }
 
             return tc_apply_word(
-                stack,
+                ctx,
                 word->inputs, word->num_inputs,
                 word->outputs, word->num_outputs,
                 op->line,
@@ -139,11 +172,11 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
         };
 
         case UNI_OP_BLOCK: {
-            return tc_block(stack, op);
+            return tc_block(ctx, op);
         }
 
         case UNI_OP_IF: {
-            if(stack->count == 0) {
+            if(!ctx->var_counter && ctx->stack.count == 0) {
                 fprintf(
                     stderr,
                     "[ERROR] (line %zu) 'if' needs a condition but stack is empty\n",
@@ -152,7 +185,7 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
                 return false;
             }
 
-            uniType cond = tc_pop_raw(stack);
+            uniType cond = tc_pop(ctx);
             if(cond.kind != UNI_KIND_INT) {
                 fprintf(
                     stderr,
@@ -162,136 +195,238 @@ static bool tc_op(uniTypeStack* stack, uniOp* op) {
                 return false;
             }
 
-            #define CLONE_STACK(dst, src)                                           \
-                uniTypeStack dst = {0};                                             \
-                dst.count = (src)->count;                                           \
-                dst.cap = (src)->count;                                             \
-                if(dst.cap > 0) {                                                   \
-                    dst.items = malloc(dst.cap * sizeof(uniType));                  \
-                    if(!dst.items) return false;                                    \
-                    memcpy(dst.items, (src)->items, dst.count * sizeof(uniType));   \
-                }
+            #define CLONE_CTX(dst, src)                                         \
+                uniTcContext dst = {0};                                         \
+                dst.stack.count = (src)->stack.count;                           \
+                dst.stack.cap = (src)->stack.count;                             \
+                if(dst.stack.cap > 0) {                                         \
+                    dst.stack.items = malloc(dst.stack.cap * sizeof(uniType));  \
+                    if(!dst.stack.items) return false;                          \
+                    memcpy(                                                     \
+                        dst.stack.items,                                        \
+                        (src)->stack.items,                                     \
+                        dst.stack.count * sizeof(uniType));                     \
+                }                                                               \
+                size_t _##dst##_local_var_counter = 0;                          \
+                dst.var_counter = (src)->var_counter                            \
+                    ? &_##dst##_local_var_counter                               \
+                    : NULL;
 
-            CLONE_STACK(then_stack, stack);
-            bool then_ok = tc_block(&then_stack, op->cval.then_body);
+            CLONE_CTX(then_ctx, ctx);
+            bool then_ok = tc_block(&then_ctx, op->cval.then_body);
             if(!then_ok) {
-                if(then_stack.items) free(then_stack.items);
+                if(then_ctx.stack.items) free(then_ctx.stack.items);
                 return false;
             }
 
             if(!op->cval.else_body) {
                 // No else block, therefore body must be stack-neutral
-                if(then_stack.count != stack->count) {
+                if(!ctx->var_counter && then_ctx.stack.count != ctx->stack.count) {
                     fprintf(
                         stderr,
                         "[ERROR] (line %zu) 'if' without 'else' must be stack-neutral: "
                         "started with %zu items, ended with %zu\n",
                         op->line,
-                        stack->count, then_stack.count
+                        ctx->stack.count, then_ctx.stack.count
                     );
-                    free(then_stack.items);
+                    free(then_ctx.stack.items);
                     return false;
                 }
 
-                free(then_stack.items);
+                free(then_ctx.stack.items);
                 return true;
             }
 
             // Has else, therefore both branches must produce the same stack effects
-            CLONE_STACK(else_stack, stack);
-            bool else_ok = tc_block(&else_stack, op->cval.else_body);
+            CLONE_CTX(else_ctx, ctx);
+            bool else_ok = tc_block(&else_ctx, op->cval.else_body);
             if(!else_ok) {
-                if(then_stack.items) free(then_stack.items);
-                if(else_stack.items) free(else_stack.items);
+                if(then_ctx.stack.items) free(then_ctx.stack.items);
+                if(else_ctx.stack.items) free(else_ctx.stack.items);
                 return false;
             }
 
-            if(then_stack.count != else_stack.count) {
+            if(then_ctx.stack.count != else_ctx.stack.count) {
                 fprintf(
                     stderr,
                     "[ERROR] (line %zu) 'if/else' branches produce different stack depths: "
                     "then=%zu, else=%zu\n",
                     op->line,
-                    then_stack.count, else_stack.count
+                    then_ctx.stack.count, else_ctx.stack.count
                 );
-                free(then_stack.items);
-                free(else_stack.items);
+                free(then_ctx.stack.items);
+                free(else_ctx.stack.items);
                 return false;
             }
 
-            for(size_t i = 0; i < then_stack.count; i++) {
-                if(then_stack.items[i].kind != else_stack.items[i].kind) {
+            for(size_t i = 0; i < then_ctx.stack.count; i++) {
+                if(then_ctx.stack.items[i].kind != else_ctx.stack.items[i].kind) {
                     fprintf(
                         stderr,
                         "[ERROR] (line %zu) 'if/else' branch produce different types at stack position %zu: "
                         "then=%s, else=%s\n",
                         op->line, i,
-                        type_name(then_stack.items[i]), type_name(else_stack.items[i])
+                        type_name(then_ctx.stack.items[i]), type_name(else_ctx.stack.items[i])
                     );
-                    free(then_stack.items);
-                    free(else_stack.items);
+                    free(then_ctx.stack.items);
+                    free(else_ctx.stack.items);
                     return false;
                 }
             }
 
             // Branches match, update stack to reflect what they produced
-            free(stack->items);
-            stack->items = then_stack.items;
-            stack->count = then_stack.count;
-            stack->cap = then_stack.cap;
+            free(ctx->stack.items);
+            ctx->stack.items = then_ctx.stack.items;
+            ctx->stack.count = then_ctx.stack.count;
+            ctx->stack.cap = then_ctx.stack.cap;
 
-            free(else_stack.items);
+            free(else_ctx.stack.items);
             return true;
         }
 
         case UNI_OP_WHILE: {
-            CLONE_STACK(cond_stack, stack);
-            if(!tc_block(&cond_stack, op->wval.cond_body)) {
-                free(cond_stack.items);
+            CLONE_CTX(cond_ctx, ctx);
+            if(!tc_block(&cond_ctx, op->wval.cond_body)) {
+                free(cond_ctx.stack.items);
+                return false;
+            }
+
+            if(!ctx->var_counter && (
+                cond_ctx.stack.count != ctx->stack.count + 1 ||
+                cond_ctx.stack.items[cond_ctx.stack.count-1].kind != UNI_KIND_INT
+            )) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) 'while' condition block must leave exactly one int on the stack\n",
+                    op->line
+                );
+                free(cond_ctx.stack.items);
                 return false;
             }
 
             if(
-                cond_stack.count != stack->count + 1 ||
-                cond_stack.items[cond_stack.count-1].kind != UNI_KIND_INT
+                ctx->var_counter &&
+                cond_ctx.stack.count > 0 &&
+                cond_ctx.stack.items[cond_ctx.stack.count-1].kind != UNI_KIND_INT
             ) {
                 fprintf(
                     stderr,
                     "[ERROR] (line %zu) 'while' condition block must leave exactly one int on the stack\n",
                     op->line
                 );
-                free(cond_stack.items);
+                free(cond_ctx.stack.items);
                 return false;
             }
-            free(cond_stack.items);
+            free(cond_ctx.stack.items);
 
-            CLONE_STACK(body_stack, stack);
-            if(!tc_block(&body_stack, op->wval.loop_body)) {
-                free(body_stack.items);
+            CLONE_CTX(body_ctx, ctx);
+            if(!tc_block(&body_ctx, op->wval.loop_body)) {
+                free(body_ctx.stack.items);
                 return false;
             }
 
-            if(body_stack.count != stack->count) {
+            if(!ctx->var_counter && body_ctx.stack.count != ctx->stack.count) {
                 fprintf(
                     stderr,
                     "[ERROR] (line %zu) 'while' body must be stack-neutral\n",
                     op->line
                 );
-                free(body_stack.items);
+                free(body_ctx.stack.items);
                 return false;
             }
 
-            free(body_stack.items);
+            free(body_ctx.stack.items);
             return true;
-
-            #undef CLONE_STACK
         }
+
+        case UNI_OP_DEF: {
+            if(ctx->var_counter) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) Nested word definitions are not allowed\n",
+                    op->line
+                );
+                return false;
+            }
+
+            char* name = malloc(op->dval.name_len + 1);
+            if(!name) return false;
+            memcpy(name, op->dval.name, op->dval.name_len);
+            name[op->dval.name_len] = '\0';
+
+            if(uni_lookupWord(name, op->dval.name_len)) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) Duplicate word '%s'\n",
+                    op->line, name
+                );
+                free(name);
+                return false;
+            }
+
+            size_t var_counter = 0;
+            uniTcContext inf_ctx = {{0}, &var_counter};
+            if(!tc_block(&inf_ctx, op->dval.body)) {
+                free(inf_ctx.stack.items);
+                free(name);
+                return false;
+            }
+            free(inf_ctx.stack.items);
+
+            uniTcContext check_ctx = {{0}, NULL};
+            for(size_t i = 0; i < var_counter; i++)
+                tc_push(&check_ctx.stack, UNI_TYPE_VAR(i));
+            if(!tc_block(&check_ctx, op->dval.body)) {
+                free(check_ctx.stack.items);
+                free(name);
+                return false;
+            }
+
+            uniType* inputs = malloc(var_counter * sizeof(uniType));
+            if(!inputs && var_counter > 0) {
+                free(check_ctx.stack.items);
+                free(name);
+                return false;
+            }
+            for(size_t i = 0; i < var_counter; i++) {
+                inputs[i] = check_ctx.var_bound[i]? check_ctx.var_bindings[i] : UNI_TYPE_VAR(i);
+            }
+
+            uniType* outputs = malloc(check_ctx.stack.count * sizeof(uniType));
+            if(!outputs && check_ctx.stack.count > 0) {
+                free(inputs);
+                free(check_ctx.stack.items);
+                free(name);
+                return false;
+            }
+            for(size_t i = 0; i < check_ctx.stack.count; i++) {
+                uniType t = check_ctx.stack.items[i];
+                if(t.kind == UNI_KIND_VAR && check_ctx.var_bound[t.var_id])
+                    t = check_ctx.var_bindings[t.var_id];
+
+                outputs[i] = t;
+            }
+
+            uniWord word = {
+                name,
+                inputs, var_counter,
+                outputs, check_ctx.stack.count,
+                NULL
+            };
+            word.body = op->dval.body;
+            uni_registerWord(word);
+
+            free(check_ctx.stack.items);
+            return true;
+        } break;
+
+        #undef CLONE_CTX
     }
 }
 
-bool tc_block(uniTypeStack* stack, uniOp* block) {
+bool tc_block(uniTcContext* ctx, uniOp* block) {
     for(size_t i = 0; i < block->bval.num_items; i++) {
-        if(!tc_op(stack, block->bval.items[i])) return false;
+        if(!tc_op(ctx, block->bval.items[i])) return false;
     }
 
     return true;
@@ -299,9 +434,10 @@ bool tc_block(uniTypeStack* stack, uniOp* block) {
 
 bool uni_typecheck(uniOp* program) {
     uniTypeStack stack = {0};
+    uniTcContext ctx = {stack, NULL};
 
-    bool result = tc_block(&stack, program);
+    bool result = tc_block(&ctx, program);
 
-    if(stack.items) free(stack.items);
+    if(ctx.stack.items) free(ctx.stack.items);
     return result;
 }

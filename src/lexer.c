@@ -69,6 +69,15 @@ size_t uni_lex(const char* src, uniToken* out, size_t max_tokens) {
             } break;
 
             default: {
+                if(*p == '-' && p[1] >= '0' && p[1] <= '9') {
+                    char* end;
+                    tok.ival = strtoll(p, &end, 0);
+                    tok.type = UNI_TOKEN_INT;
+                    tok.len = (size_t)(end - p);
+                    p = end;
+                    break;
+                }
+
                 const char* start = p;
                 while(
                     *p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' &&

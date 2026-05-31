@@ -23,14 +23,18 @@ typedef struct uniType_t {
 #define UNI_TYPE_VAR(id) ((uniType){UNI_KIND_VAR, (id)})
 
 typedef struct uniWord_t {
-    const char* name;
+    char* name;
     uniType* inputs;    // Types popped by word (from bottom to top of stack)
     size_t num_inputs;
     uniType* outputs;   // Types pushed by word
     size_t num_outputs;
     void (*emit)(struct uniEmitter_t* emitter);
+    uniOp* body;
 } uniWord;
 
+void uni_registerWord(uniWord word);
 uniWord* uni_lookupWord(const char* name, size_t len);
+
+void uni_cleanupWords(void);
 
 #endif
