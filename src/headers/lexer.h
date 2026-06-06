@@ -4,10 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum uniTokenType_t {
     UNI_TOKEN_NULL,
     UNI_TOKEN_INT,
+    UNI_TOKEN_FLOAT,
     UNI_TOKEN_STRING,
     UNI_TOKEN_WORD,
     UNI_TOKEN_LPAREN,
@@ -24,7 +26,7 @@ typedef struct uniToken_t {
     size_t line;
     union {
         int64_t ival;
-        float fval;
+        double fval;
     };
 } uniToken;
 

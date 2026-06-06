@@ -1,1 +1,1 @@
-\[ERROR\] \(line [0-9]+\) 'square' type mismatch: expected int but got string
+\[ERROR\] \(line [0-9]+\) 'square' type mismatch: expected number but got string

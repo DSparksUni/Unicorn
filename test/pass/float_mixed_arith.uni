@@ -1,0 +1,2 @@
+1 2.5 + printf "\n" prints
+10 2.5 * printf "\n" prints

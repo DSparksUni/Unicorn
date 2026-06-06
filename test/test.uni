@@ -1,3 +1,1 @@
-def square { dup * }
-
-"Hello" square
+1.5 2.5 + printf "\n" prints

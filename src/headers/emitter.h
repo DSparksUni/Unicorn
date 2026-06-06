@@ -19,7 +19,7 @@ typedef struct uniEmitter_t {
     LLVMContextRef ctx;
     LLVMModuleRef module;
     LLVMBuilderRef builder;
-    LLVMValueRef func;              // Current function
+    LLVMValueRef func;                      // Current function
 
     LLVMValueRef* str_globals;
     size_t str_count;
@@ -28,8 +28,8 @@ typedef struct uniEmitter_t {
     uniEmitStack stack;
 
     LLVMTypeRef printf_type;
-    LLVMValueRef printf_fn;         // Handle to extern printf
-    LLVMValueRef fmt_int, fmt_str;
+    LLVMValueRef printf_fn;                 // Handle to extern printf
+    LLVMValueRef fmt_int, fmt_str, fmt_flt;
 } uniEmitter;
 
 uniEmitter* uni_createEmitter(void);

@@ -1,15 +1,24 @@
 #include "headers/typecheck.h"
-#include <stdio.h>
 
 static char* kind_name(uniTypeKind kind) {
     switch(kind) {
         case UNI_KIND_INT: return "int";
+        case UNI_KIND_FLOAT: return "float";
+        case UNI_KIND_NUM: return "num";
         case UNI_KIND_STRING: return "string";
         case UNI_KIND_VAR: return "var";
     }
 }
 static char* type_name(uniType type) {
     return kind_name(type.kind);
+}
+
+static bool tc_kinds_compatible(uniTypeKind a, uniTypeKind b) {
+    if(a == b) return true;
+    if(a == UNI_KIND_NUM && (b == UNI_KIND_INT || b == UNI_KIND_FLOAT)) return true;
+    if(b == UNI_KIND_NUM && (a == UNI_KIND_INT || a == UNI_KIND_FLOAT)) return true;
+
+    return false;
 }
 
 static bool tc_push(uniTypeStack* stack, uniType type) {
@@ -75,7 +84,7 @@ static bool tc_apply_word(
                 bindings[vid] = actual;
                 bound[vid] = true;
             } else {
-                if(actual.kind != bindings[vid].kind) {
+                if(!tc_kinds_compatible(actual.kind, bindings[vid].kind)) {
                     fprintf(
                         stderr,
                         "[ERROR] (line %zu) '%s' type mismatch: "
@@ -97,7 +106,7 @@ static bool tc_apply_word(
 
                 external_bindings++;
             } else {
-                if(expected.kind != bindings[vid].kind) {
+                if(!tc_kinds_compatible(expected.kind, bindings[vid].kind)) {
                     fprintf(
                         stderr,
                         "[ERROR] (line %zu) '%s' type mismatch: "
@@ -108,8 +117,36 @@ static bool tc_apply_word(
                     return false;
                 }
             }
+        } else if(expected.kind == UNI_KIND_NUM) {
+            uint8_t nid = expected.var_id;
+            if(!tc_kinds_compatible(actual.kind, UNI_KIND_NUM)) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) '%s' type mismatch: "
+                    "expected number but got %s\n",
+                    line, word_name,
+                    type_name(actual)
+                );
+                return false;
+            }
+
+            if(!bound[nid]) {
+                bindings[nid] = actual;
+                bound[nid] = true;
+            } else if(actual.kind == UNI_KIND_INT || actual.kind == UNI_KIND_FLOAT) {
+                if(actual.kind == UNI_KIND_FLOAT) bindings[nid] = actual;
+            } else {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) '%s' type mismatch: "
+                    "type variable '%c' was bound to %s but got %s\n",
+                    line, word_name,
+                    'A' + nid, type_name(bindings[nid]), type_name(actual)
+                );
+                return false;
+            }
         } else {
-            if(actual.kind != expected.kind) {
+            if(!tc_kinds_compatible(actual.kind, expected.kind)) {
                 fprintf(
                     stderr,
                     "[ERROR] (line %zu) '%s' type mismatch: "
@@ -124,7 +161,7 @@ static bool tc_apply_word(
 
     for(size_t i = 0; i < num_outputs; i++) {
         uniType out = outputs[i];
-        if(out.kind == UNI_KIND_VAR) {
+        if(out.kind == UNI_KIND_VAR || out.kind == UNI_KIND_NUM) {
             uint8_t vid = out.var_id;
             if(!bound[vid]) {
                 fprintf(
@@ -150,6 +187,7 @@ static bool tc_block(uniTcContext* ctx, uniOp* block);
 static bool tc_op(uniTcContext* ctx, uniOp* op) {
     switch(op->type) {
         case UNI_OP_PUSH_INT: return tc_push(&ctx->stack, UNI_TYPE_INT);
+        case UNI_OP_PUSH_FLOAT: return tc_push(&ctx->stack, UNI_TYPE_FLOAT);
         case UNI_OP_PUSH_STR: return tc_push(&ctx->stack, UNI_TYPE_STRING);
 
         case UNI_OP_WORD: {
@@ -401,8 +439,12 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             }
             for(size_t i = 0; i < check_ctx.stack.count; i++) {
                 uniType t = check_ctx.stack.items[i];
-                if(t.kind == UNI_KIND_VAR && check_ctx.var_bound[t.var_id])
+                if(
+                    (t.kind == UNI_KIND_VAR || t.kind == UNI_KIND_NUM) &&
+                    check_ctx.var_bound[t.var_id]
+                ) {
                     t = check_ctx.var_bindings[t.var_id];
+                }
 
                 outputs[i] = t;
             }

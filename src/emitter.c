@@ -67,6 +67,14 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
             uni_emitPush(emitter, val);
         } break;
 
+        case UNI_OP_PUSH_FLOAT: {
+            LLVMValueRef val = LLVMConstReal(
+                LLVMDoubleTypeInContext(emitter->ctx),
+                op->fval
+            );
+            uni_emitPush(emitter, val);
+        } break;
+
         case UNI_OP_PUSH_STR: {
             LLVMValueRef val = emitter->str_globals[op->sval.global_idx];
             LLVMValueRef zero = LLVMConstInt(
@@ -176,7 +184,7 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
                     for(size_t i = 0; i < then_stack_count; i++) {
                         LLVMValueRef phi = LLVMBuildPhi(
                             emitter->builder,
-                            LLVMInt64TypeInContext(emitter->ctx),
+                            LLVMTypeOf(then_vals[i]),
                             "phi"
                         );
                         LLVMValueRef incoming_vals[] = {then_vals[i], else_vals[i]};
@@ -196,7 +204,7 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
                 for(size_t i = 0; i < stack_depth_before; i++) {
                     LLVMValueRef phi = LLVMBuildPhi(
                         emitter->builder,
-                        LLVMInt64TypeInContext(emitter->ctx),
+                        LLVMTypeOf(pre_vals[i]),
                         "phi"
                     );
                     LLVMValueRef incoming_vals[] = {
@@ -374,6 +382,17 @@ void uni_emitProgram(uniEmitter* emitter, uniOp* program) {
         "fmt_str"
     );
     LLVMSetInitializer(emitter->fmt_str, str_fmt_str);
+
+    const char fmt_flt[] = "%f";
+    LLVMValueRef str_fmt_flt = LLVMConstStringInContext(
+        emitter->ctx, fmt_flt, sizeof(fmt_flt), true
+    );
+    emitter->fmt_flt = LLVMAddGlobal(
+        emitter->module,
+        LLVMArrayType(LLVMInt8TypeInContext(emitter->ctx), sizeof(fmt_flt)),
+        "fmt_flt"
+    );
+    LLVMSetInitializer(emitter->fmt_flt, str_fmt_flt);
 
     // Declare string constants
     collect_strings(emitter, program);

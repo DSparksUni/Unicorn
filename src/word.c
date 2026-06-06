@@ -6,6 +6,7 @@ void emit_sub(uniEmitter* emitter);
 void emit_mult(uniEmitter* emitter);
 void emit_div(uniEmitter* emitter);
 void emit_printi(uniEmitter* emitter);
+void emit_printf(uniEmitter* emitter);
 void emit_prints(uniEmitter* emitter);
 void emit_eq(uniEmitter* emitter);
 void emit_neq(uniEmitter* emitter);
@@ -20,6 +21,12 @@ void emit_over(uniEmitter* emitter);
 
 static uniType INT1[] = { UNI_TYPE_INT };
 static uniType INT2[] = { UNI_TYPE_INT, UNI_TYPE_INT };
+
+static uniType FLOAT1[] = { UNI_TYPE_FLOAT };
+
+static uniType NUM_A[] = { UNI_TYPE_NUM(0) };
+static uniType NUM_AA[] = { UNI_TYPE_NUM(0), UNI_TYPE_NUM(0) };
+
 static uniType STR1[] = { UNI_TYPE_STRING };
 
 static uniType VAR_A[] = { UNI_TYPE_VAR(0) };
@@ -28,20 +35,21 @@ static uniType VAR_AB[] = { UNI_TYPE_VAR(0), UNI_TYPE_VAR(1) };
 static uniType VAR_BA[] = { UNI_TYPE_VAR(1), UNI_TYPE_VAR(0) };
 static uniType VAR_ABA[] = { UNI_TYPE_VAR(0), UNI_TYPE_VAR(1), UNI_TYPE_VAR(0) };
 
-#define NUM_WORDS 16
+#define NUM_WORDS 17
 static uniWord WORDS[NUM_WORDS] = {
-    {"+", INT2, 2, INT1, 1, emit_add, NULL},
-    {"-", INT2, 2, INT1, 1, emit_sub, NULL},
-    {"*", INT2, 2, INT1, 1, emit_mult, NULL},
-    {"/", INT2, 2, INT1, 1, emit_div, NULL},
+    {"+", NUM_AA, 2, NUM_A, 1, emit_add, NULL},
+    {"-", NUM_AA, 2, NUM_A, 1, emit_sub, NULL},
+    {"*", NUM_AA, 2, NUM_A, 1, emit_mult, NULL},
+    {"/", NUM_AA, 2, NUM_A, 1, emit_div, NULL},
     {"printi", INT1, 1, NULL, 0, emit_printi, NULL},
+    {"printf", FLOAT1, 1, NULL, 0, emit_printf, NULL},
     {"prints", STR1, 1, NULL, 0, emit_prints, NULL},
-    {"==", INT2, 2, INT1, 1, emit_eq, NULL},
-    {"!=", INT2, 2, INT1, 1, emit_neq, NULL},
-    {"<", INT2, 2, INT1, 1, emit_lt, NULL},
-    {">", INT2, 2, INT1, 1, emit_gt, NULL},
-    {"<=", INT2, 2, INT1, 1, emit_le, NULL},
-    {">=", INT2, 2, INT1, 1, emit_ge, NULL},
+    {"==", NUM_AA, 2, INT1, 1, emit_eq, NULL},
+    {"!=", NUM_AA, 2, INT1, 1, emit_neq, NULL},
+    {"<", NUM_AA, 2, INT1, 1, emit_lt, NULL},
+    {">", NUM_AA, 2, INT1, 1, emit_gt, NULL},
+    {"<=", NUM_AA, 2, INT1, 1, emit_le, NULL},
+    {">=", NUM_AA, 2, INT1, 1, emit_ge, NULL},
     {"dup", VAR_A, 1, VAR_AA, 2, emit_dup, NULL},
     {"drop", VAR_A, 1, NULL, 0, emit_drop, NULL},
     {"swap", VAR_AB, 2, VAR_BA, 2, emit_swap, NULL},
@@ -95,11 +103,44 @@ void uni_cleanupWords(void) {
     free(CUSTOM_WORDS);
 }
 
+#define RESOLVE_FLOAT(emitter, a, b, fexp, iexp)                        \
+    if(                                                                 \
+        LLVMGetTypeKind(LLVMTypeOf(a)) == LLVMDoubleTypeKind ||         \
+        LLVMGetTypeKind(LLVMTypeOf(b)) == LLVMDoubleTypeKind            \
+    ) {                                                                 \
+        if(LLVMGetTypeKind(LLVMTypeOf(a)) != LLVMDoubleTypeKind) {      \
+            a = LLVMBuildSIToFP(                                        \
+                emitter->builder,                                       \
+                a,                                                      \
+                LLVMDoubleTypeInContext(emitter->ctx),                  \
+                "itof"                                                  \
+            );                                                          \
+        }                                                               \
+        if(LLVMGetTypeKind(LLVMTypeOf(b)) != LLVMDoubleTypeKind) {      \
+            b = LLVMBuildSIToFP(                                        \
+                emitter->builder,                                       \
+                b,                                                      \
+                LLVMDoubleTypeInContext(emitter->ctx),                  \
+                "itof"                                                  \
+            );                                                          \
+        }                                                               \
+        fexp;                                                           \
+    } else {                                                            \
+        iexp;                                                           \
+    }                                                                   \
+
+
 void emit_add(uniEmitter* emitter) {
     LLVMValueRef b = uni_emitPop(emitter);
     LLVMValueRef a = uni_emitPop(emitter);
 
-    LLVMValueRef r = LLVMBuildAdd(emitter->builder, a, b, "add");
+    LLVMValueRef r;
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        r = LLVMBuildFAdd(emitter->builder, a, b, "fadd"),
+        r = LLVMBuildAdd(emitter->builder, a, b, "add")
+    );
 
     uni_emitPush(emitter, r);
 }
@@ -108,7 +149,13 @@ void emit_sub(uniEmitter* emitter) {
     LLVMValueRef b = uni_emitPop(emitter);
     LLVMValueRef a = uni_emitPop(emitter);
 
-    LLVMValueRef r = LLVMBuildSub(emitter->builder, a, b, "sub");
+    LLVMValueRef r;
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        r = LLVMBuildFSub(emitter->builder, a, b, "fsub"),
+        r = LLVMBuildSub(emitter->builder, a, b, "sub")
+    );
 
     uni_emitPush(emitter, r);
 }
@@ -117,7 +164,13 @@ void emit_mult(uniEmitter* emitter) {
     LLVMValueRef b = uni_emitPop(emitter);
     LLVMValueRef a = uni_emitPop(emitter);
 
-    LLVMValueRef r = LLVMBuildMul(emitter->builder, a, b, "mul");
+    LLVMValueRef r;
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        r = LLVMBuildFMul(emitter->builder, a, b, "fmul"),
+        r = LLVMBuildMul(emitter->builder, a, b, "mul")
+    );
 
     uni_emitPush(emitter, r);
 }
@@ -126,7 +179,13 @@ void emit_div(uniEmitter* emitter) {
     LLVMValueRef b = uni_emitPop(emitter);
     LLVMValueRef a = uni_emitPop(emitter);
 
-    LLVMValueRef r = LLVMBuildSDiv(emitter->builder, a, b, "div");
+    LLVMValueRef r;
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        r = LLVMBuildFDiv(emitter->builder, a, b, "fdiv"),
+        r = LLVMBuildSDiv(emitter->builder, a, b, "div")
+    );
 
     uni_emitPush(emitter, r);
 }
@@ -157,6 +216,32 @@ void emit_printi(uniEmitter* emitter) {
     );
 }
 
+void emit_printf(uniEmitter* emitter) {
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    LLVMValueRef zero = LLVMConstInt(
+        LLVMInt64TypeInContext(emitter->ctx),
+        0, false
+    );
+    LLVMValueRef indicies[] = {zero, zero};
+    LLVMValueRef ptr = LLVMBuildGEP2(
+        emitter->builder,
+        LLVMGlobalGetValueType(emitter->fmt_flt),
+        emitter->fmt_flt,
+        indicies, 2,
+        "strptr"
+    );
+
+    LLVMValueRef printf_args[] = {ptr, a};
+    LLVMBuildCall2(
+        emitter->builder,
+        emitter->printf_type,
+        emitter->printf_fn,
+        printf_args, 2,
+        "printflt"
+    );
+}
+
 void emit_prints(uniEmitter* emitter) {
     LLVMValueRef a = uni_emitPop(emitter);
 
@@ -183,10 +268,10 @@ void emit_prints(uniEmitter* emitter) {
     );
 }
 
-static void emit_icmp(uniEmitter* emitter, LLVMIntPredicate pred) {
-    LLVMValueRef b = uni_emitPop(emitter);
-    LLVMValueRef a = uni_emitPop(emitter);
-
+static void emit_icmp(
+    uniEmitter* emitter, LLVMIntPredicate pred,
+    LLVMValueRef a, LLVMValueRef b
+) {
     LLVMValueRef boolean = LLVMBuildICmp(emitter->builder, pred, a, b, "cmp");
     LLVMValueRef r = LLVMBuildZExt(
         emitter->builder, boolean, LLVMInt64TypeInContext(emitter->ctx), "ext"
@@ -195,28 +280,88 @@ static void emit_icmp(uniEmitter* emitter, LLVMIntPredicate pred) {
     uni_emitPush(emitter, r);
 }
 
+static void emit_fcmp(
+    uniEmitter* emitter, LLVMRealPredicate pred,
+    LLVMValueRef a, LLVMValueRef b
+) {
+    LLVMValueRef boolean = LLVMBuildFCmp(emitter->builder, pred, a, b, "fcmp");
+    LLVMValueRef r = LLVMBuildZExt(
+        emitter->builder, boolean, LLVMInt64TypeInContext(emitter->ctx), "ext"
+    );
+
+    uni_emitPush(emitter, r);
+}
+
 void emit_eq(uniEmitter* emitter) {
-    emit_icmp(emitter, LLVMIntEQ);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        emit_fcmp(emitter, LLVMRealOEQ, a, b),
+        emit_icmp(emitter, LLVMIntEQ, a, b)
+    );
 }
 
 void emit_neq(uniEmitter* emitter) {
-    emit_icmp(emitter, LLVMIntNE);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        emit_fcmp(emitter, LLVMRealONE, a, b),
+        emit_icmp(emitter, LLVMIntNE, a, b)
+    );
 }
 
 void emit_lt(uniEmitter* emitter) {
-    emit_icmp(emitter, LLVMIntSLT);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        emit_fcmp(emitter, LLVMRealOLT, a, b),
+        emit_icmp(emitter, LLVMIntSLT, a, b)
+    );
 }
 
 void emit_gt(uniEmitter* emitter) {
-    emit_icmp(emitter, LLVMIntSGT);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        emit_fcmp(emitter, LLVMRealOGT, a, b),
+        emit_icmp(emitter, LLVMIntSGT, a, b)
+    );
 }
 
 void emit_le(uniEmitter* emitter) {
-    emit_icmp(emitter, LLVMIntSLE);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        emit_fcmp(emitter, LLVMRealOLE, a, b),
+        emit_icmp(emitter, LLVMIntSLE, a, b)
+    );
 }
 
 void emit_ge(uniEmitter* emitter) {
-    emit_icmp(emitter, LLVMIntSGE);
+    LLVMValueRef b = uni_emitPop(emitter);
+    LLVMValueRef a = uni_emitPop(emitter);
+
+    RESOLVE_FLOAT(
+        emitter,
+        a, b,
+        emit_fcmp(emitter, LLVMRealOGE, a, b),
+        emit_icmp(emitter, LLVMIntSGE, a, b)
+    );
 }
 
 void emit_dup(uniEmitter* emitter) {
@@ -246,3 +391,5 @@ void emit_over(uniEmitter* emitter) {
     uni_emitPush(emitter, b);
     uni_emitPush(emitter, a);
 }
+
+#undef RESOLVE_FLOAT

@@ -9,6 +9,8 @@ struct uniEmitter_t;
 
 typedef enum uniTypeKind_t {
     UNI_KIND_INT,
+    UNI_KIND_FLOAT,
+    UNI_KIND_NUM,
     UNI_KIND_STRING,
     UNI_KIND_VAR
 } uniTypeKind;
@@ -19,6 +21,8 @@ typedef struct uniType_t {
 } uniType;
 
 #define UNI_TYPE_INT ((uniType){UNI_KIND_INT, 0})
+#define UNI_TYPE_FLOAT ((uniType){UNI_KIND_FLOAT, 0})
+#define UNI_TYPE_NUM(id) ((uniType){UNI_KIND_NUM, id})
 #define UNI_TYPE_STRING ((uniType){UNI_KIND_STRING, 0})
 #define UNI_TYPE_VAR(id) ((uniType){UNI_KIND_VAR, (id)})
 

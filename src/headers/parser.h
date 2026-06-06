@@ -22,6 +22,7 @@ bool uni_expectParser(uniParser* parser, uniTokenType type);
 
 typedef enum uniOpType_t {
     UNI_OP_PUSH_INT,
+    UNI_OP_PUSH_FLOAT,
     UNI_OP_PUSH_STR,
     UNI_OP_WORD,
     UNI_OP_BLOCK,
@@ -35,6 +36,7 @@ typedef struct uniOp_t {
     size_t line;
     union {
         int64_t ival;
+        double fval;
         struct {
             const char* start;
             size_t len;

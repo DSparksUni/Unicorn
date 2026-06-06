@@ -52,6 +52,19 @@ uniOp* uni_parseOne(uniParser* parser) {
             return op;
         } break;
 
+        case UNI_TOKEN_FLOAT: {
+            uni_advanceParser(parser);
+
+            uniOp* op = malloc(sizeof(uniOp));
+            if(!op) return NULL;
+
+            op->type = UNI_OP_PUSH_FLOAT;
+            op->line = tok.line;
+            op->fval = tok.fval;
+
+            return op;
+        } break;
+
         case UNI_TOKEN_STRING: {
             uni_advanceParser(parser);
 
@@ -293,6 +306,10 @@ void uni_printOp(uniOp* op, size_t indent) {
     switch(op->type) {
         case UNI_OP_PUSH_INT: {
             printf("PUSH_INT %lld\n", op->ival);
+        } break;
+
+        case UNI_OP_PUSH_FLOAT: {
+            printf("PUSH_FLOAT %f\n", op->fval);
         } break;
 
         case UNI_OP_PUSH_STR: {
