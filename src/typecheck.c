@@ -96,6 +96,7 @@ static bool tc_apply_word(
     size_t line,
     const char* word_name
 ) {
+    // Ensure there are enough values on the stack for the word
     if(!ctx->var_counter && ctx->stack.count < num_inputs) {
         fprintf(
             stderr, "[ERROR] (line %zu) '%s' needs %zu value(s) but stack only has %zu\n",
@@ -108,11 +109,14 @@ static bool tc_apply_word(
     bool bound[UNI_MAX_VARS];
     memset(bound, 0, sizeof(bound));
 
+    // Check each stack slot
     size_t external_bindings = 0;
     for(size_t i = 0; i < num_inputs; i++) {
         uniType actual = tc_pop(ctx);
         uniType expected = inputs[num_inputs - 1 - i];
 
+        // If the expected kind is a var, then check if it's not bound, otherwise enforce
+        // the actual kind is compatible with the bound kind
         if(expected.kind == UNI_KIND_VAR) {
             uint8_t vid = expected.var_id;
             if(!bound[vid]) {
@@ -130,6 +134,8 @@ static bool tc_apply_word(
                     return false;
                 }
             }
+
+        // If the actual type is a var, then do the same check as above
         } else if(actual.kind == UNI_KIND_VAR) {
             uint8_t vid = actual.var_id;
             if(!bound[vid] && expected.kind != UNI_KIND_VAR) {
@@ -152,6 +158,9 @@ static bool tc_apply_word(
                     return false;
                 }
             }
+
+        // If the expected type is a num, check if the actual type is compatible with num
+        // (i.e. int or float)
         } else if(expected.kind == UNI_KIND_NUM) {
             uint8_t nid = expected.var_id;
             if(!tc_kinds_compatible(actual.kind, UNI_KIND_NUM)) {
@@ -194,6 +203,7 @@ static bool tc_apply_word(
         }
     }
 
+    // Ensure every word output is bound
     for(size_t i = 0; i < num_outputs; i++) {
         uniType out = outputs[i];
         if(out.kind == UNI_KIND_VAR || out.kind == UNI_KIND_NUM) {
