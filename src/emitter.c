@@ -27,6 +27,10 @@ uniEmitter* uni_createEmitter(void) {
 
     emitter->stack = (uniEmitStack){NULL, 0, 0};
 
+    emitter->bindings = NULL;
+    emitter->num_bindings = 0;
+    emitter->bindings_cap = 0;
+
     LLVMTypeRef printf_args[] = {LLVMPointerTypeInContext(emitter->ctx, 0) };
     emitter->printf_type = LLVMFunctionType(
         LLVMInt32TypeInContext(emitter->ctx),
@@ -43,6 +47,7 @@ void uni_destroyEmitter(uniEmitter* emitter) {
     LLVMContextDispose(emitter->ctx);
     free(emitter->str_globals);
     free(emitter->stack.items);
+    free(emitter->bindings);
     free(emitter);
 }
 
@@ -55,6 +60,22 @@ bool uni_writeProgram(uniEmitter* emitter, const char* out_path) {
     }
     return true;
 }
+
+static uniEmitBinding* emit_lookupBinding(
+    uniEmitter* emitter, const char* name, size_t name_len
+) {
+    for(size_t i = emitter->num_bindings; i > 0; i--) {
+        if(
+            name_len == emitter->bindings[i-1].name_len &&
+            strncmp(name, emitter->bindings[i-1].name, name_len) == 0
+        ) {
+            return &emitter->bindings[i-1];
+        }
+    }
+
+    return NULL;
+}
+
 
 void uni_emitOp(uniEmitter* emitter, uniOp* op) {
     switch(op->type) {
@@ -93,6 +114,18 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
         } break;
 
         case UNI_OP_WORD: {
+            uniEmitBinding* bind = emit_lookupBinding(emitter, op->sval.start, op->sval.len);
+            if(bind) {
+                LLVMValueRef val = LLVMBuildLoad2(
+                    emitter->builder,
+                    LLVMGlobalGetValueType(bind->ptr),
+                    bind->ptr,
+                    "load_global"
+                );
+                uni_emitPush(emitter, val);
+                break;
+            }
+
             uniWord* word = uni_lookupWord(op->sval.start, op->sval.len);
             if(word && word->body) {
                 uni_emitBlock(emitter, word->body);
@@ -272,6 +305,62 @@ void uni_emitOp(uniEmitter* emitter, uniOp* op) {
         } break;
 
         case UNI_OP_DEF: break;
+
+        case UNI_OP_LET: {
+            LLVMTypeRef bind_type;
+            if(op->lval.type_name_len == 3 && strncmp(op->lval.type_name, "int", 3) == 0) {
+                bind_type = LLVMInt64TypeInContext(emitter->ctx);
+            } else if(op->lval.type_name_len == 5 && strncmp(op->lval.type_name, "float", 5) == 0) {
+                bind_type = LLVMDoubleTypeInContext(emitter->ctx);
+            } else if(op->lval.type_name_len == 6 && strncmp(op->lval.type_name, "string", 6) == 0) {
+                bind_type = LLVMPointerTypeInContext(emitter->ctx, 0);
+            } else {
+                // Unknown type name, this should have been caught in typechecking
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) Unknown type '%.*s' for variable definition\n",
+                    op->line, (int)op->lval.type_name_len, op->lval.type_name
+                );
+                break;
+            }
+
+            LLVMValueRef bind_init = LLVMConstNull(bind_type);
+            LLVMValueRef binding = LLVMAddGlobal(
+                emitter->module,
+                bind_type,
+                "var"
+            );
+            LLVMSetInitializer(binding, bind_init);
+
+            if(emitter->num_bindings >= emitter->bindings_cap) {
+                size_t new_cap = (emitter->bindings_cap == 0)? 8 : emitter->bindings_cap * 2;
+                uniEmitBinding* new_items = realloc(
+                    emitter->bindings, new_cap * sizeof(uniEmitBinding)
+                );
+                if(!new_items) break;
+
+                emitter->bindings = new_items;
+                emitter->bindings_cap = new_cap;
+            }
+
+            emitter->bindings[emitter->num_bindings++] = (uniEmitBinding){
+                .name = op->lval.name,
+                .name_len = op->lval.name_len,
+                .ptr = binding
+            };
+        } break;
+
+        case UNI_OP_STORE: {
+            uniEmitBinding* bind = emit_lookupBinding(emitter, op->stval.name, op->stval.name_len);
+            if(bind) {
+                LLVMValueRef val = uni_emitPop(emitter);
+                LLVMBuildStore(
+                    emitter->builder,
+                    val,
+                    bind->ptr
+                );
+            }
+        } break;
     }
 }
 

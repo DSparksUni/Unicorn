@@ -29,6 +29,8 @@ typedef enum uniOpType_t {
     UNI_OP_IF,
     UNI_OP_WHILE,
     UNI_OP_DEF,
+    UNI_OP_LET,
+    UNI_OP_STORE,
 } uniOpType;
 
 typedef struct uniOp_t {
@@ -59,6 +61,17 @@ typedef struct uniOp_t {
             size_t name_len;
             struct uniOp_t* body;
         } dval;
+        struct {
+            const char* name;
+            size_t name_len;
+            const char* type_name;
+            size_t type_name_len;
+            bool is_mut;
+        } lval;
+        struct {
+            const char* name;
+            size_t name_len;
+        } stval;
     };
 } uniOp;
 

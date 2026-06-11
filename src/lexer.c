@@ -47,6 +47,12 @@ size_t uni_lex(const char* src, uniToken* out, size_t max_tokens) {
                 p++;
             } break;
 
+            case ':': {
+                tok.type = UNI_TOKEN_COLON;
+                tok.len = 1;
+                p++;
+            } break;
+
             case '\"': {
                 const char* start = p++;
                 while(*p && *p != '\"') {
@@ -76,7 +82,12 @@ size_t uni_lex(const char* src, uniToken* out, size_t max_tokens) {
             } break;
 
             default: {
-                if(*p == '-' && p[1] >= '0' && p[1] <= '9') {
+                if(*p == '-' && p[1] == '>') {
+                    tok.type = UNI_TOKEN_ARROW;
+                    tok.len = 2;
+                    p += 2;
+                    break;
+                } else if(*p == '-' && p[1] >= '0' && p[1] <= '9') {
                     char* end;
                     if(is_float(p)) {
                         tok.fval = strtod(p, &end);
@@ -95,7 +106,7 @@ size_t uni_lex(const char* src, uniToken* out, size_t max_tokens) {
                     *p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' &&
                     *p != '(' && *p != ')' &&
                     *p != '{' && *p != '}' &&
-                    *p != '\"'
+                    *p != '\"' && *p != ':'
                 ) {
                     p++;
                 }
@@ -126,6 +137,8 @@ void uni_printToken(uniToken tok) {
         case UNI_TOKEN_RPAREN:  printf("RPAREN\n"); break;
         case UNI_TOKEN_LBRACE:  printf("LBRACE\n"); break;
         case UNI_TOKEN_RBRACE:  printf("RBRACE\n"); break;
+        case UNI_TOKEN_COLON:   printf("COLON\n");  break;
+        case UNI_TOKEN_ARROW:   printf("ARROW\n");  break;
         case UNI_TOKEN_EOF:     printf("EOF\n");    break;
     }
 

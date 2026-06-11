@@ -191,6 +191,14 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
         case UNI_OP_PUSH_STR: return tc_push(&ctx->stack, UNI_TYPE_STRING);
 
         case UNI_OP_WORD: {
+            uniBinding* bind = uni_lookupBinding(
+                ctx->bindings, ctx->num_bindings, op->sval.start, op->sval.len
+            );
+            if(bind) {
+                tc_push(&ctx->stack, bind->type);
+                return true;
+            }
+
             uniWord* word = uni_lookupWord(op->sval.start, op->sval.len);
             if(!word) {
                 fprintf(
@@ -233,22 +241,36 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                 return false;
             }
 
-            #define CLONE_CTX(dst, src)                                         \
-                uniTcContext dst = {0};                                         \
-                dst.stack.count = (src)->stack.count;                           \
-                dst.stack.cap = (src)->stack.count;                             \
-                if(dst.stack.cap > 0) {                                         \
-                    dst.stack.items = malloc(dst.stack.cap * sizeof(uniType));  \
-                    if(!dst.stack.items) return false;                          \
-                    memcpy(                                                     \
-                        dst.stack.items,                                        \
-                        (src)->stack.items,                                     \
-                        dst.stack.count * sizeof(uniType));                     \
-                }                                                               \
-                size_t _##dst##_local_var_counter = 0;                          \
-                dst.var_counter = (src)->var_counter                            \
-                    ? &_##dst##_local_var_counter                               \
-                    : NULL;
+            #define CLONE_CTX(dst, src)                                             \
+                uniTcContext dst = {0};                                             \
+                dst.stack.count = (src)->stack.count;                               \
+                dst.stack.cap = (src)->stack.count;                                 \
+                if(dst.stack.cap > 0) {                                             \
+                    dst.stack.items = malloc(dst.stack.cap * sizeof(uniType));      \
+                    if(!dst.stack.items) return false;                              \
+                    memcpy(                                                         \
+                        dst.stack.items,                                            \
+                        (src)->stack.items,                                         \
+                        dst.stack.count * sizeof(uniType));                         \
+                }                                                                   \
+                size_t _##dst##_local_var_counter = 0;                              \
+                dst.var_counter = (src)->var_counter                                \
+                    ? &_##dst##_local_var_counter                                   \
+                    : NULL;                                                         \
+                dst.num_bindings = (src)->num_bindings;                             \
+                dst.bindings_cap = (src)->bindings_cap;                             \
+                dst.is_global = (src)->is_global;                                   \
+                if(dst.bindings_cap > 0) {                                          \
+                    dst.bindings = malloc(dst.bindings_cap * sizeof(uniBinding));   \
+                    if(!dst.bindings) {                                             \
+                        if(dst.stack.cap > 0) free(dst.stack.items);                \
+                        return false;                                               \
+                    }                                                               \
+                    memcpy(                                                         \
+                        dst.bindings,                                               \
+                        (src)->bindings,                                            \
+                        dst.num_bindings * sizeof(uniBinding));                     \
+                }                                                                   \
 
             CLONE_CTX(then_ctx, ctx);
             bool then_ok = tc_block(&then_ctx, op->cval.then_body);
@@ -268,10 +290,12 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                         ctx->stack.count, then_ctx.stack.count
                     );
                     free(then_ctx.stack.items);
+                    free(then_ctx.bindings);
                     return false;
                 }
 
                 free(then_ctx.stack.items);
+                free(then_ctx.bindings);
                 return true;
             }
 
@@ -281,6 +305,7 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             if(!else_ok) {
                 if(then_ctx.stack.items) free(then_ctx.stack.items);
                 if(else_ctx.stack.items) free(else_ctx.stack.items);
+                if(else_ctx.bindings) free(else_ctx.bindings);
                 return false;
             }
 
@@ -293,7 +318,9 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     then_ctx.stack.count, else_ctx.stack.count
                 );
                 free(then_ctx.stack.items);
+                free(then_ctx.bindings);
                 free(else_ctx.stack.items);
+                free(else_ctx.bindings);
                 return false;
             }
 
@@ -307,7 +334,9 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                         type_name(then_ctx.stack.items[i]), type_name(else_ctx.stack.items[i])
                     );
                     free(then_ctx.stack.items);
+                    free(then_ctx.bindings);
                     free(else_ctx.stack.items);
+                    free(else_ctx.bindings);
                     return false;
                 }
             }
@@ -318,7 +347,9 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             ctx->stack.count = then_ctx.stack.count;
             ctx->stack.cap = then_ctx.stack.cap;
 
+            free(then_ctx.bindings);
             free(else_ctx.stack.items);
+            free(else_ctx.bindings);
             return true;
         }
 
@@ -326,6 +357,7 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             CLONE_CTX(cond_ctx, ctx);
             if(!tc_block(&cond_ctx, op->wval.cond_body)) {
                 free(cond_ctx.stack.items);
+                free(cond_ctx.bindings);
                 return false;
             }
 
@@ -339,6 +371,7 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     op->line
                 );
                 free(cond_ctx.stack.items);
+                free(cond_ctx.bindings);
                 return false;
             }
 
@@ -353,13 +386,16 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     op->line
                 );
                 free(cond_ctx.stack.items);
+                free(cond_ctx.bindings);
                 return false;
             }
             free(cond_ctx.stack.items);
+            free(cond_ctx.bindings);
 
             CLONE_CTX(body_ctx, ctx);
             if(!tc_block(&body_ctx, op->wval.loop_body)) {
                 free(body_ctx.stack.items);
+                free(body_ctx.bindings);
                 return false;
             }
 
@@ -370,10 +406,12 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     op->line
                 );
                 free(body_ctx.stack.items);
+                free(body_ctx.bindings);
                 return false;
             }
 
             free(body_ctx.stack.items);
+            free(body_ctx.bindings);
             return true;
         }
 
@@ -403,19 +441,49 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             }
 
             size_t var_counter = 0;
-            uniTcContext inf_ctx = {{0}, &var_counter};
+            uniTcContext inf_ctx = {
+                .stack = {0},
+                .var_counter = &var_counter,
+                .num_bindings = ctx->num_bindings,
+                .bindings_cap = ctx->bindings_cap
+            };
+            if(ctx->num_bindings > 0) {
+                inf_ctx.bindings = malloc(ctx->bindings_cap * sizeof(uniBinding));
+                if(!inf_ctx.bindings) {
+                    free(name);
+                    return false;
+                }
+                memcpy(inf_ctx.bindings, ctx->bindings, ctx->num_bindings * sizeof(uniBinding));
+            }
             if(!tc_block(&inf_ctx, op->dval.body)) {
                 free(inf_ctx.stack.items);
+                free(inf_ctx.bindings);
                 free(name);
                 return false;
             }
             free(inf_ctx.stack.items);
+            free(inf_ctx.bindings);
 
-            uniTcContext check_ctx = {{0}, NULL};
+            uniTcContext check_ctx = {
+                .stack = {0},
+                .var_counter = NULL,
+                .num_bindings = ctx->num_bindings,
+                .bindings_cap = ctx->bindings_cap
+            };
+            if(ctx->num_bindings > 0) {
+                check_ctx.bindings = malloc(ctx->bindings_cap * sizeof(uniBinding));
+                if(!check_ctx.bindings) {
+                    free(name);
+                    return false;
+                }
+                memcpy(check_ctx.bindings, ctx->bindings, ctx->num_bindings * sizeof(uniBinding));
+            }
+
             for(size_t i = 0; i < var_counter; i++)
                 tc_push(&check_ctx.stack, UNI_TYPE_VAR(i));
             if(!tc_block(&check_ctx, op->dval.body)) {
                 free(check_ctx.stack.items);
+                free(check_ctx.bindings);
                 free(name);
                 return false;
             }
@@ -423,6 +491,7 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             uniType* inputs = malloc(var_counter * sizeof(uniType));
             if(!inputs && var_counter > 0) {
                 free(check_ctx.stack.items);
+                free(check_ctx.bindings);
                 free(name);
                 return false;
             }
@@ -434,6 +503,7 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             if(!outputs && check_ctx.stack.count > 0) {
                 free(inputs);
                 free(check_ctx.stack.items);
+                free(check_ctx.bindings);
                 free(name);
                 return false;
             }
@@ -459,10 +529,93 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             uni_registerWord(word);
 
             free(check_ctx.stack.items);
+            free(check_ctx.bindings);
             return true;
         } break;
 
         #undef CLONE_CTX
+
+        case UNI_OP_LET: {
+            if(ctx->is_global) {
+                uniType bind_type;
+                if(!uni_resolveTypeName(op->lval.type_name, op->lval.type_name_len, &bind_type)) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) Unknown type name for variable: '%.*s'\n",
+                        op->line, (int)op->lval.type_name_len, op->lval.type_name
+                    );
+                    return false;
+                }
+
+                if(ctx->num_bindings >= ctx->bindings_cap) {
+                    size_t new_cap = (ctx->bindings_cap == 0)? 8 : ctx->bindings_cap * 2;
+                    uniBinding* new_bindings = realloc(ctx->bindings, new_cap * sizeof(uniBinding));
+                    if(!new_bindings) return false;
+
+                    ctx->bindings = new_bindings;
+                    ctx->bindings_cap = new_cap;
+                }
+
+                ctx->bindings[ctx->num_bindings++] = (uniBinding){
+                    .name = op->lval.name,
+                    .name_len = op->lval.name_len,
+                    .type = bind_type,
+                    .is_mut = op->lval.is_mut,
+                    .is_global = ctx->is_global
+                };
+
+                return true;
+            } else {
+                // TODO: For now, all bindings will be global until functions are defined
+                return false;
+            }
+        }
+
+        case UNI_OP_STORE: {
+            uniBinding* bind = uni_lookupBinding(
+                ctx->bindings, ctx->num_bindings, op->stval.name, op->stval.name_len
+            );
+            if(!bind) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) Unknown variable '%.*s'\n",
+                    op->line, (int)op->stval.name_len, op->stval.name
+                );
+                return false;
+            }
+
+            if(!bind->is_mut) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) Cannot store into unmutable variable '%.*s'\n",
+                    op->line, (int)op->stval.name_len, op->stval.name
+                );
+                return false;
+            }
+
+            if(ctx->stack.count == 0) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) 'store' requires a value on the stack\n",
+                    op->line
+                );
+                return false;
+            }
+
+            uniType actual = tc_pop(ctx);
+            if(actual.kind != bind->type.kind) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) 'store' type mismatch: "
+                    "expected %s but got %s\n",
+                    op->line,
+                    type_name(bind->type), type_name(actual)
+                );
+                return false;
+            }
+
+            return true;
+        }
     }
 }
 
@@ -476,10 +629,16 @@ bool tc_block(uniTcContext* ctx, uniOp* block) {
 
 bool uni_typecheck(uniOp* program) {
     uniTypeStack stack = {0};
-    uniTcContext ctx = {stack, NULL};
+    uniTcContext ctx = {
+        .stack = stack,
+        .var_counter = NULL,
+        .bindings = NULL,
+        .is_global = true
+    };
 
     bool result = tc_block(&ctx, program);
 
     if(ctx.stack.items) free(ctx.stack.items);
+    if(ctx.bindings) free(ctx.bindings);
     return result;
 }

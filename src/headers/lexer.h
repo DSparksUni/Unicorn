@@ -16,6 +16,8 @@ typedef enum uniTokenType_t {
     UNI_TOKEN_RPAREN,
     UNI_TOKEN_LBRACE,
     UNI_TOKEN_RBRACE,
+    UNI_TOKEN_COLON,
+    UNI_TOKEN_ARROW,
     UNI_TOKEN_EOF
 } uniTokenType;
 

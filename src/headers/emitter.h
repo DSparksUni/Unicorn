@@ -15,6 +15,12 @@ typedef struct uniEmitStack_t {
     size_t cap;
 } uniEmitStack;
 
+typedef struct uniEmitBinding_t {
+    const char* name;
+    size_t name_len;
+    LLVMValueRef ptr;
+} uniEmitBinding;
+
 typedef struct uniEmitter_t {
     LLVMContextRef ctx;
     LLVMModuleRef module;
@@ -26,6 +32,10 @@ typedef struct uniEmitter_t {
     size_t str_cap;
 
     uniEmitStack stack;
+
+    uniEmitBinding* bindings;
+    size_t num_bindings;
+    size_t bindings_cap;
 
     LLVMTypeRef printf_type;
     LLVMValueRef printf_fn;                 // Handle to extern printf

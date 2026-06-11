@@ -84,6 +84,30 @@ uniOp* uni_parseOne(uniParser* parser) {
             return uni_parseBlock(parser);
         } break;
 
+        case UNI_TOKEN_ARROW: {
+            uni_advanceParser(parser);
+
+            if(uni_peekParser(parser).type != UNI_TOKEN_WORD) {
+                fprintf(
+                    stderr,
+                    "[ERROR] (line %zu) '->' must be followed by a variable name\n",
+                    tok.line
+                );
+                return NULL;
+            }
+            uniToken name_tok = uni_advanceParser(parser);
+
+            uniOp* op = malloc(sizeof(uniOp));
+            if(!op) return NULL;
+
+            op->type = UNI_OP_STORE;
+            op->line = tok.line;
+            op->stval.name = name_tok.start;
+            op->stval.name_len = name_tok.len;
+
+            return op;
+        } break;
+
         case UNI_TOKEN_WORD: {
             uni_advanceParser(parser);
 
@@ -220,6 +244,77 @@ uniOp* uni_parseOne(uniParser* parser) {
                 op->dval.name = name_tok.start;
                 op->dval.name_len = name_tok.len;
                 op->dval.body = body;
+
+                return op;
+            }
+
+            if(tok.len == 3 && strncmp(tok.start, "let", 3) == 0) {
+                bool is_mut = false;
+                if(uni_peekParser(parser).type != UNI_TOKEN_WORD) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) 'let' must be followed by the variable's name\n",
+                        tok.line
+                    );
+                    return NULL;
+                }
+
+                const char* name;
+                size_t name_len;
+                uniToken next = uni_advanceParser(parser);
+                if(next.len == 3 && strncmp(next.start, "mut", 3) == 0) {
+                    is_mut = true;
+                    if(uni_peekParser(parser).type != UNI_TOKEN_WORD) {
+                        fprintf(
+                            stderr,
+                            "[ERROR] (line %zu) 'let' must be followed by the variable's name\n",
+                            tok.line
+                        );
+                        return NULL;
+                    }
+                    uniToken name_tok = uni_advanceParser(parser);
+                    name = name_tok.start;
+                    name_len = name_tok.len;
+                } else {
+                    name = next.start;
+                    name_len = next.len;
+                }
+
+                if(uni_peekParser(parser).type != UNI_TOKEN_COLON) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) Variables must be declared with an explicit type\n",
+                        tok.line
+                    );
+                    return NULL;
+                }
+                uni_advanceParser(parser);
+
+                const char* type_name;
+                size_t type_name_len;
+                if(uni_peekParser(parser).type != UNI_TOKEN_WORD) {
+                    fprintf(
+                        stderr,
+                        "[ERROR] (line %zu) Variables must be declared with an explicit type\n",
+                        tok.line
+                    );
+                    return NULL;
+                } else {
+                    uniToken type_name_tok = uni_advanceParser(parser);
+                    type_name = type_name_tok.start;
+                    type_name_len = type_name_tok.len;
+                }
+
+                uniOp* op = malloc(sizeof(uniOp));
+                if(!op) return NULL;
+
+                op->type = UNI_OP_LET;
+                op->line = tok.line;
+                op->lval.name = name;
+                op->lval.name_len = name_len;
+                op->lval.type_name = type_name;
+                op->lval.type_name_len = type_name_len;
+                op->lval.is_mut = is_mut;
 
                 return op;
             }
@@ -365,6 +460,19 @@ void uni_printOp(uniOp* op, size_t indent) {
             for(size_t i = 0; i < op->dval.body->bval.num_items; i++) {
                 uni_printOp(op->dval.body->bval.items[i], indent+4);
             }
+        } break;
+
+        case UNI_OP_LET: {
+            printf(
+                "LET (%s%.*s): (%.*s)\n",
+                (op->lval.is_mut)? "mut " : "",
+                (int)op->lval.name_len, op->lval.name,
+                (int)op->lval.type_name_len, op->lval.type_name
+            );
+        } break;
+
+        case UNI_OP_STORE: {
+            printf("STORE (%.*s)\n", (int)op->stval.name_len, op->stval.name);
         } break;
     }
 }
