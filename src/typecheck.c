@@ -1,4 +1,5 @@
 #include "headers/typecheck.h"
+#include <stdbool.h>
 
 static char* kind_name(uniTypeKind kind) {
     switch(kind) {
@@ -53,6 +54,40 @@ static uniType tc_pop(uniTcContext* ctx) {
     return tc_pop_raw(&ctx->stack);
 }
 
+static bool tc_cloneCtx(uniTcContext* src, uniTcContext* dst, size_t* var_counter) {
+    *dst = (uniTcContext){0};
+
+    dst->stack.count = src->stack.count;
+    dst->stack.cap = src->stack.cap;
+    if(dst->stack.cap > 0) {
+        dst->stack.items = malloc(dst->stack.cap * sizeof(uniType));
+        if(!dst->stack.items) return false;
+
+        memcpy(dst->stack.items, src->stack.items, dst->stack.count * sizeof(uniType));
+    }
+
+    dst->var_counter = src->var_counter? var_counter : NULL;
+
+    dst->num_bindings = src->num_bindings;
+    dst->bindings_cap = src->bindings_cap;
+    if(dst->bindings_cap > 0) {
+        dst->bindings = malloc(dst->bindings_cap * sizeof(uniBinding));
+        if(!dst->bindings) {
+            if(dst->stack.cap > 0) free(dst->stack.items);
+            return false;
+        }
+
+        memcpy(dst->bindings, src->bindings, src->num_bindings * sizeof(uniBinding));
+    }
+
+    dst->is_global = src->is_global;
+
+    return true;
+}
+#define CLONE_CTX(dst, src)                                 \
+    uniTcContext dst = {0};                                 \
+    size_t _##dst##_local_var_counter = 0;                  \
+    tc_cloneCtx(src, &dst, &_##dst##_local_var_counter);
 
 static bool tc_apply_word(
     uniTcContext* ctx,
@@ -222,6 +257,9 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
         }
 
         case UNI_OP_IF: {
+            bool status = true;
+
+            // Check if the condition is on the stack
             if(!ctx->var_counter && ctx->stack.count == 0) {
                 fprintf(
                     stderr,
@@ -231,6 +269,7 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                 return false;
             }
 
+            // Check if the condition is an int
             uniType cond = tc_pop(ctx);
             if(cond.kind != UNI_KIND_INT) {
                 fprintf(
@@ -241,46 +280,16 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                 return false;
             }
 
-            #define CLONE_CTX(dst, src)                                             \
-                uniTcContext dst = {0};                                             \
-                dst.stack.count = (src)->stack.count;                               \
-                dst.stack.cap = (src)->stack.count;                                 \
-                if(dst.stack.cap > 0) {                                             \
-                    dst.stack.items = malloc(dst.stack.cap * sizeof(uniType));      \
-                    if(!dst.stack.items) return false;                              \
-                    memcpy(                                                         \
-                        dst.stack.items,                                            \
-                        (src)->stack.items,                                         \
-                        dst.stack.count * sizeof(uniType));                         \
-                }                                                                   \
-                size_t _##dst##_local_var_counter = 0;                              \
-                dst.var_counter = (src)->var_counter                                \
-                    ? &_##dst##_local_var_counter                                   \
-                    : NULL;                                                         \
-                dst.num_bindings = (src)->num_bindings;                             \
-                dst.bindings_cap = (src)->bindings_cap;                             \
-                dst.is_global = (src)->is_global;                                   \
-                if(dst.bindings_cap > 0) {                                          \
-                    dst.bindings = malloc(dst.bindings_cap * sizeof(uniBinding));   \
-                    if(!dst.bindings) {                                             \
-                        if(dst.stack.cap > 0) free(dst.stack.items);                \
-                        return false;                                               \
-                    }                                                               \
-                    memcpy(                                                         \
-                        dst.bindings,                                               \
-                        (src)->bindings,                                            \
-                        dst.num_bindings * sizeof(uniBinding));                     \
-                }                                                                   \
-
+            // Check the then block into its own context
             CLONE_CTX(then_ctx, ctx);
             bool then_ok = tc_block(&then_ctx, op->cval.then_body);
             if(!then_ok) {
-                if(then_ctx.stack.items) free(then_ctx.stack.items);
-                return false;
+                status = false;
+                goto free_then_ctx_items;
             }
 
+            // If there is no else block, then the if body must be stack-neutral
             if(!op->cval.else_body) {
-                // No else block, therefore body must be stack-neutral
                 if(!ctx->var_counter && then_ctx.stack.count != ctx->stack.count) {
                     fprintf(
                         stderr,
@@ -289,26 +298,22 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                         op->line,
                         ctx->stack.count, then_ctx.stack.count
                     );
-                    free(then_ctx.stack.items);
-                    free(then_ctx.bindings);
-                    return false;
+                    status = false;
+                    goto free_then_ctx_bindings;
                 }
 
-                free(then_ctx.stack.items);
-                free(then_ctx.bindings);
-                return true;
+                goto free_then_ctx_bindings;
             }
 
-            // Has else, therefore both branches must produce the same stack effects
+            // Check the else block into its own context
             CLONE_CTX(else_ctx, ctx);
             bool else_ok = tc_block(&else_ctx, op->cval.else_body);
             if(!else_ok) {
-                if(then_ctx.stack.items) free(then_ctx.stack.items);
-                if(else_ctx.stack.items) free(else_ctx.stack.items);
-                if(else_ctx.bindings) free(else_ctx.bindings);
-                return false;
+                status = false;
+                goto free_else_ctx_bindings;
             }
 
+            // Ensure both the then and else blocks result in the same stack depth
             if(then_ctx.stack.count != else_ctx.stack.count) {
                 fprintf(
                     stderr,
@@ -317,13 +322,11 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     op->line,
                     then_ctx.stack.count, else_ctx.stack.count
                 );
-                free(then_ctx.stack.items);
-                free(then_ctx.bindings);
-                free(else_ctx.stack.items);
-                free(else_ctx.bindings);
-                return false;
+                status = false;
+                goto free_else_ctx_bindings;
             }
 
+            // Ensure both blocks produce the same types in the same position
             for(size_t i = 0; i < then_ctx.stack.count; i++) {
                 if(then_ctx.stack.items[i].kind != else_ctx.stack.items[i].kind) {
                     fprintf(
@@ -333,34 +336,44 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                         op->line, i,
                         type_name(then_ctx.stack.items[i]), type_name(else_ctx.stack.items[i])
                     );
-                    free(then_ctx.stack.items);
-                    free(then_ctx.bindings);
-                    free(else_ctx.stack.items);
-                    free(else_ctx.bindings);
-                    return false;
+                    status = false;
+                    goto free_else_ctx_bindings;
                 }
             }
 
-            // Branches match, update stack to reflect what they produced
+            // Update the stack to reflect what the blocks produce
             free(ctx->stack.items);
             ctx->stack.items = then_ctx.stack.items;
+            then_ctx.stack.items = NULL;
             ctx->stack.count = then_ctx.stack.count;
             ctx->stack.cap = then_ctx.stack.cap;
 
-            free(then_ctx.bindings);
-            free(else_ctx.stack.items);
+        free_else_ctx_bindings:
             free(else_ctx.bindings);
-            return true;
+        free_else_ctx_items:
+            free(else_ctx.stack.items);
+        free_then_ctx_bindings:
+            free(then_ctx.bindings);
+        free_then_ctx_items:
+            free(then_ctx.stack.items);
+
+            return status;
         }
 
         case UNI_OP_WHILE: {
+            bool status = true;
+
+            // Check the cond block into its own context
             CLONE_CTX(cond_ctx, ctx);
             if(!tc_block(&cond_ctx, op->wval.cond_body)) {
-                free(cond_ctx.stack.items);
-                free(cond_ctx.bindings);
-                return false;
+                status = false;
+                goto free_cond_ctx_bindings;
             }
 
+            // Check both that the condition context has the condition on the stack,
+            // and the condition is an int
+
+            // Normal case: no var counter, therefore not in inference mode
             if(!ctx->var_counter && (
                 cond_ctx.stack.count != ctx->stack.count + 1 ||
                 cond_ctx.stack.items[cond_ctx.stack.count-1].kind != UNI_KIND_INT
@@ -370,11 +383,11 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     "[ERROR] (line %zu) 'while' condition block must leave exactly one int on the stack\n",
                     op->line
                 );
-                free(cond_ctx.stack.items);
-                free(cond_ctx.bindings);
-                return false;
+                status = false;
+                goto free_cond_ctx_bindings;
             }
 
+            // Inference case: there is a var counter, therefore in inference mode
             if(
                 ctx->var_counter &&
                 cond_ctx.stack.count > 0 &&
@@ -385,18 +398,15 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     "[ERROR] (line %zu) 'while' condition block must leave exactly one int on the stack\n",
                     op->line
                 );
-                free(cond_ctx.stack.items);
-                free(cond_ctx.bindings);
-                return false;
+                status = false;
+                goto free_cond_ctx_bindings;
             }
-            free(cond_ctx.stack.items);
-            free(cond_ctx.bindings);
 
+            // Check the body clock into its own context
             CLONE_CTX(body_ctx, ctx);
             if(!tc_block(&body_ctx, op->wval.loop_body)) {
-                free(body_ctx.stack.items);
-                free(body_ctx.bindings);
-                return false;
+                status = false;
+                goto free_body_ctx_bindings;
             }
 
             if(!ctx->var_counter && body_ctx.stack.count != ctx->stack.count) {
@@ -405,17 +415,27 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                     "[ERROR] (line %zu) 'while' body must be stack-neutral\n",
                     op->line
                 );
-                free(body_ctx.stack.items);
-                free(body_ctx.bindings);
-                return false;
+                status = false;
             }
 
-            free(body_ctx.stack.items);
+        free_body_ctx_bindings:
             free(body_ctx.bindings);
-            return true;
+        free_body_ctx_items:
+            free(body_ctx.stack.items);
+        free_cond_ctx_bindings:
+            free(cond_ctx.bindings);
+        free_cond_ctx_items:
+            free(cond_ctx.stack.items);
+
+            return status;
         }
 
         case UNI_OP_DEF: {
+            bool status = true;
+
+            // Check is the var counter is non-null, which would mean the typechecker is in inference mode,
+            // which is currently only set by word definitions, because nested words are currently
+            // not allowed
             if(ctx->var_counter) {
                 fprintf(
                     stderr,
@@ -425,21 +445,24 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
                 return false;
             }
 
+            // Copy the name of the word definition out of the op
             char* name = malloc(op->dval.name_len + 1);
             if(!name) return false;
             memcpy(name, op->dval.name, op->dval.name_len);
             name[op->dval.name_len] = '\0';
 
+            // Check if the name is already a defined word
             if(uni_lookupWord(name, op->dval.name_len)) {
                 fprintf(
                     stderr,
                     "[ERROR] (line %zu) Duplicate word '%s'\n",
                     op->line, name
                 );
-                free(name);
-                return false;
+                status = false;
+                goto free_name;
             }
 
+            // First pass: create an inference context with an empty stack
             size_t var_counter = 0;
             uniTcContext inf_ctx = {
                 .stack = {0},
@@ -450,20 +473,17 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             if(ctx->num_bindings > 0) {
                 inf_ctx.bindings = malloc(ctx->bindings_cap * sizeof(uniBinding));
                 if(!inf_ctx.bindings) {
-                    free(name);
-                    return false;
+                    status = false;
+                    goto free_name;
                 }
                 memcpy(inf_ctx.bindings, ctx->bindings, ctx->num_bindings * sizeof(uniBinding));
             }
             if(!tc_block(&inf_ctx, op->dval.body)) {
-                free(inf_ctx.stack.items);
-                free(inf_ctx.bindings);
-                free(name);
-                return false;
+                status = false;
+                goto free_inf_ctx_bindings;
             }
-            free(inf_ctx.stack.items);
-            free(inf_ctx.bindings);
 
+            // Second pass: create a normal checking context with an empty stack
             uniTcContext check_ctx = {
                 .stack = {0},
                 .var_counter = NULL,
@@ -473,8 +493,8 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             if(ctx->num_bindings > 0) {
                 check_ctx.bindings = malloc(ctx->bindings_cap * sizeof(uniBinding));
                 if(!check_ctx.bindings) {
-                    free(name);
-                    return false;
+                    status = false;
+                    goto free_inf_ctx_bindings;
                 }
                 memcpy(check_ctx.bindings, ctx->bindings, ctx->num_bindings * sizeof(uniBinding));
             }
@@ -482,18 +502,14 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             for(size_t i = 0; i < var_counter; i++)
                 tc_push(&check_ctx.stack, UNI_TYPE_VAR(i));
             if(!tc_block(&check_ctx, op->dval.body)) {
-                free(check_ctx.stack.items);
-                free(check_ctx.bindings);
-                free(name);
-                return false;
+                status = false;
+                goto free_check_ctx_bindings;
             }
 
             uniType* inputs = malloc(var_counter * sizeof(uniType));
             if(!inputs && var_counter > 0) {
-                free(check_ctx.stack.items);
-                free(check_ctx.bindings);
-                free(name);
-                return false;
+                status = false;
+                goto free_check_ctx_bindings;
             }
             for(size_t i = 0; i < var_counter; i++) {
                 inputs[i] = check_ctx.var_bound[i]? check_ctx.var_bindings[i] : UNI_TYPE_VAR(i);
@@ -501,11 +517,8 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
 
             uniType* outputs = malloc(check_ctx.stack.count * sizeof(uniType));
             if(!outputs && check_ctx.stack.count > 0) {
-                free(inputs);
-                free(check_ctx.stack.items);
-                free(check_ctx.bindings);
-                free(name);
-                return false;
+                status = false;
+                goto free_check_ctx_bindings;
             }
             for(size_t i = 0; i < check_ctx.stack.count; i++) {
                 uniType t = check_ctx.stack.items[i];
@@ -527,13 +540,21 @@ static bool tc_op(uniTcContext* ctx, uniOp* op) {
             };
             word.body = op->dval.body;
             uni_registerWord(word);
+            name = NULL;
 
-            free(check_ctx.stack.items);
+        free_check_ctx_bindings:
             free(check_ctx.bindings);
-            return true;
-        } break;
+        free_check_ctx_items:
+            free(check_ctx.stack.items);
+        free_inf_ctx_bindings:
+            free(inf_ctx.bindings);
+        free_inf_ctx_items:
+            free(inf_ctx.stack.items);
+        free_name:
+            free(name);
 
-        #undef CLONE_CTX
+            return status;
+        } break;
 
         case UNI_OP_LET: {
             if(ctx->is_global) {
@@ -642,3 +663,5 @@ bool uni_typecheck(uniOp* program) {
     if(ctx.bindings) free(ctx.bindings);
     return result;
 }
+
+#undef CLONE_CTX
