@@ -12,7 +12,7 @@ file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
 
 find_package(LLVM CONFIG REQUIRED)
 find_package(cxxopts CONFIG REQUIRED)
-
+find_package(FastFloat CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
@@ -26,6 +26,7 @@ llvm_map_components_to_libnames(llvm_libs
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${llvm_libs})
 target_link_libraries(${PROJECT_NAME} PRIVATE cxxopts::cxxopts)
+target_link_libraries(${PROJECT_NAME} PRIVATE FastFloat::fast_float)
 
 target_link_options(${PROJECT_NAME} PRIVATE "-Wl,/ignore:4099")
 

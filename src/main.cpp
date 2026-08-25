@@ -4,6 +4,7 @@
 #include <cxxopts.hpp>
 
 #include "util.hpp"
+#include "lexer.hpp"
 
 struct Input {
     std::string in_file;
@@ -23,6 +24,10 @@ int main(int argc, char** argv) {
         return -1;
     }
     std::string input_content = read_result.value();
+
+    std::vector<uni::Token> tokens = uni::lex(input_content);
+    for(const uni::Token& tok : tokens)
+        std::cout << tok.toString() << '\n';
 
     return 0;
 }
