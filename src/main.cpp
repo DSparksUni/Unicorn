@@ -5,6 +5,7 @@
 
 #include "util.hpp"
 #include "lexer.hpp"
+#include "parser.hpp"
 
 struct Input {
     std::string in_file;
@@ -26,8 +27,11 @@ int main(int argc, char** argv) {
     std::string input_content = read_result.value();
 
     std::vector<uni::Token> tokens = uni::lex(input_content);
-    for(const uni::Token& tok : tokens)
-        std::cout << tok.toString() << '\n';
+
+    uni::Parser parser(tokens);
+    std::unique_ptr<uni::OpBlock> program = parser.parseProgram();
+
+    std::cout << uni::opToString(program.get()) << '\n';
 
     return 0;
 }

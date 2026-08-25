@@ -65,7 +65,7 @@ namespace uni {
                         pos++;
                     }
                     if(pos < src.size()) pos++; // Skip closing quote
-                    tokens.push_back({TokenType::UNI_TOKEN_STRING, src.substr(start, pos-start), line});
+                    tokens.push_back({TokenType::UNI_TOKEN_STRING, src.substr(start+1, pos-start-2), line});
                 } break;
 
                 default: {
