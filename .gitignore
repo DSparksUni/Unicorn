@@ -6,3 +6,4 @@ vcpkg_installed
 build
 *.ll
 *.exe
+.idea

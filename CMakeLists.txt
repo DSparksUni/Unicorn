@@ -1,36 +1,18 @@
 cmake_minimum_required(VERSION 3.10)
-project(uni C)
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/externals/sanitizers-cmake/cmake" ${CMAKE_MODULE_PATH})
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+project(uni CXX)
+
+set(CMAKE_CXX_STANDARD 20)
 
 file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/*.c
-    ${CMAKE_SOURCE_DIR}/src/headers/*.h
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
 )
 
 find_package(LLVM CONFIG REQUIRED)
 
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL" CACHE STRING "" FORCE)
-
-find_package(Sanitizers)
-
-# Strip the debug CRT flag injected by CMake's Clang/Windows platform file
-# and replace with the release CRT, matching what LLVMSupport was built against.
-string(REPLACE "--dependent-lib=msvcrtd" "--dependent-lib=msvcrt"
-    CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-string(REPLACE "-D_DEBUG" ""
-    CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
-
-target_compile_options(${PROJECT_NAME} PRIVATE
-    -Wall
-    -Wextra
-    -Wconversion
-    -Wshadow
-    -Wpedantic
-)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${LLVM_INCLUDE_DIRS})
 
@@ -41,8 +23,7 @@ llvm_map_components_to_libnames(llvm_libs
     Core
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${llvm_libs})
-
-add_sanitizers(${PROJECT_NAME})
+target_link_options(${PROJECT_NAME} PRIVATE "-Wl,/ignore:4099")
 
 enable_testing()
 
