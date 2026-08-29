@@ -6,6 +6,7 @@
 #include "util.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
+#include "typecheck.hpp"
 
 struct Input {
     std::string in_file;
@@ -31,7 +32,7 @@ int main(int argc, char** argv) {
     uni::Parser parser(tokens);
     std::unique_ptr<uni::OpBlock> program = parser.parseProgram();
 
-    std::cout << uni::opToString(program.get()) << '\n';
+    if(!uni::typecheck(program.get())) return -1;
 
     return 0;
 }

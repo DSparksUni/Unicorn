@@ -82,7 +82,7 @@ namespace uni {
                 auto op = std::make_unique<OpStore>();
                 op->type = OpType::UNI_OP_STORE;
                 op->line = tok.line;
-                op->name = tok.text;
+                op->name = name_tok.text;
 
                 return op;
             } break;
@@ -348,6 +348,11 @@ namespace uni {
                 auto o = dynamic_cast<const OpLet*>(op);
                 ss  << "LET (" << (o->is_mut? "mut " : "") << o->name
                     << "): (" << o->type_name << ")\n";
+            } break;
+
+            case OpType::UNI_OP_STORE: {
+                auto o = dynamic_cast<const OpStore*>(op);
+                ss  << "STORE (" << o->name << ")\n";
             } break;
         }
     }
