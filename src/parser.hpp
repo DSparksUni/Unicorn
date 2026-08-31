@@ -38,7 +38,8 @@ namespace uni {
     };
 
     struct OpPushStr : Op {
-        std::string_view value;
+        std::string value;
+        size_t global_idx = 0;
 
         virtual ~OpPushStr() = default;
     };

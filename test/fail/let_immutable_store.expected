@@ -1,1 +1,1 @@
-\[ERROR\] \(line [0-9]+\) Cannot store into unmutable variable 'x'
+\[ERROR\] \(line [0-9]+\) Cannot store into immutable variable 'x'

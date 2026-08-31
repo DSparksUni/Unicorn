@@ -92,7 +92,7 @@ static bool tc_apply_word(
     std::string_view name
 ) {
     if(!ctx.bind_counter && ctx.stack.size() < inputs.size()) {
-        std::cout   << "[ERROR] (line " << line << '\''
+        std::cerr   << "[ERROR] (line " << line << ") '"
                     << name << "' needs " << inputs.size()
                     << " value(s) but stack only has " << ctx.stack.size() << '\n';
         return false;
@@ -110,8 +110,8 @@ static bool tc_apply_word(
                 bindings.insert({bid, actual});
             } else {
                 if(!tc_kinds_compatible(actual.kind, bindings.at(bid).kind)) {
-                    std::cout   << "[ERROR] (line " << line
-                                << " '" << name << "' type mismatch: "
+                    std::cerr   << "[ERROR] (line " << line
+                                << ") '" << name << "' type mismatch: "
                                 << "type variable '" << 'A' + bid << "' was bound to "
                                 << type_name(bindings.at(bid).kind) << "but got "
                                 << type_name(actual.kind) << '\n';
@@ -128,8 +128,8 @@ static bool tc_apply_word(
                 ctx.bindings.insert({external_bindings++, expected});
             } else {
                 if(!tc_kinds_compatible(expected.kind, bindings.at(bid).kind)) {
-                    std::cout   << "[ERROR] (line " << line
-                                << " '" << name << "' type mismatch: "
+                    std::cerr   << "[ERROR] (line " << line
+                                << ") '" << name << "' type mismatch: "
                                 << "expected " << type_name(expected.kind)
                                 << " but got " << type_name(bindings.at(bid).kind) << '\n';
                     return false;
@@ -138,8 +138,8 @@ static bool tc_apply_word(
         } else if(expected.kind == uni::TypeKind::UNI_KIND_NUM) {
             size_t bid = expected.bind_id;
             if(!tc_kinds_compatible(actual.kind, uni::TypeKind::UNI_KIND_NUM)) {
-                std::cout   << "[ERROR] (line " << line
-                            << " '" << name << "' type mismatch: "
+                std::cerr   << "[ERROR] (line " << line
+                            << ") '" << name << "' type mismatch: "
                             << "expected number but got " << type_name(actual.kind) << '\n';
                 return false;
             }
@@ -147,11 +147,11 @@ static bool tc_apply_word(
             if(bindings.find(bid) == bindings.end()) {
                 bindings.insert({bid, actual});
             } else if(actual.kind == uni::TypeKind::UNI_KIND_FLOAT) {
-                bindings.insert({bid, actual});
+                bindings.insert_or_assign(bid, actual);
             } else {
                 if(!tc_kinds_compatible(actual.kind, expected.kind)) {
-                    std::cout   << "[ERROR] (line " << line
-                                << " '" << name << "' type mismatch: "
+                    std::cerr   << "[ERROR] (line " << line
+                                << ") '" << name << "' type mismatch: "
                                 << "expected " << type_name(expected.kind)
                                 << "but got " << type_name(actual.kind) << '\n';
                     return false;
@@ -159,8 +159,8 @@ static bool tc_apply_word(
             }
         } else {
             if(!tc_kinds_compatible(actual.kind, expected.kind)) {
-                std::cout   << "[ERROR] (line " << line
-                            << " '" << name << "' type mismatch: "
+                std::cerr   << "[ERROR] (line " << line
+                            << ") '" << name << "' type mismatch: "
                             << "expected " << type_name(expected.kind) << " but got "
                             << type_name(actual.kind) << '\n';
                 return false;
@@ -176,8 +176,8 @@ static bool tc_apply_word(
         ) {
             size_t bid = out.bind_id;
             if(bindings.find(bid) == bindings.end()) {
-                std::cout   << "[ERROR] (line " << line
-                            << " '" << name << "' output type variable '"
+                std::cerr   << "[ERROR] (line " << line
+                            << ") '" << name << "' output type variable '"
                             << 'A' + bid << "' is unbound (word definition error)\n";
                 return false;
             }
@@ -228,8 +228,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             uni::Word* word = uni::lookupWord(op->name);
             if(!word) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "Unknown word '" << op->name << "'\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Unknown word '" << op->name << "'\n";
                 return false;
             }
 
@@ -249,15 +249,15 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
         case uni::OpType::UNI_OP_IF: {
             if(!ctx.bind_counter && ctx.stack.size() == 0) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'if' needs a condition but stack is empty\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'if' needs a condition but stack is empty\n";
                 return false;
             }
 
             uni::Type cond = tc_pop(ctx);
             if(cond.kind != uni::TypeKind::UNI_KIND_INT) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'if' condition must be int, got "
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'if' condition must be int, got "
                             << type_name(cond.kind) << '\n';
                 return false;
             }
@@ -269,8 +269,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             if(!op->else_body) {
                 if(!ctx.bind_counter && then_ctx.stack.size() != ctx.stack.size()) {
-                    std::cout   << "[ERROR] (line " << raw_op->line
-                                << "'if' without 'else' must be stack-neutral: "
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") 'if' without 'else' must be stack-neutral: "
                                 << "started with " << ctx.stack.size() << " items, "
                                 << "ended with " << then_ctx.stack.size() << '\n';
                     return false;
@@ -283,8 +283,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             if(!tc_block(else_ctx, op->else_body.get())) return false;
 
             if(then_ctx.stack.size() != else_ctx.stack.size()) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'if/else' branches produce different stack depths: "
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'if/else' branches produce different stack depths: "
                             << "then=" << then_ctx.stack.size()
                             << ", else=" << else_ctx.stack.size() << '\n';
                 return false;
@@ -292,8 +292,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             for(size_t i = 0; i < then_ctx.stack.size(); i++) {
                 if(then_ctx.stack[i].kind != else_ctx.stack[i].kind) {
-                    std::cout   << "[ERROR] (line " << raw_op->line
-                                << "'if/else' branch produce different types at stack position " << i
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") 'if/else' branch produce different types at stack position " << i
                                 << ": then=" << type_name(then_ctx.stack[i].kind)
                                 <<", else=" << type_name(else_ctx.stack[i].kind) << '\n';
                     return false;
@@ -314,8 +314,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 cond_ctx.stack.size() != ctx.stack.size()+1 ||
                 cond_ctx.stack[cond_ctx.stack.size()-1].kind != uni::TypeKind::UNI_KIND_INT
             )) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'while' condition must leave exactly one int on the stack\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'while' condition block must leave exactly one int on the stack\n";
                 return false;
             }
 
@@ -324,8 +324,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 cond_ctx.stack.size() > 0 &&
                 cond_ctx.stack[cond_ctx.stack.size()-1].kind != uni::TypeKind::UNI_KIND_INT
             ) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'while' condition block must leave exactly one int on the stack\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'while' condition block must leave exactly one int on the stack\n";
                 return false;
             }
 
@@ -333,8 +333,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             if(!tc_block(body_ctx, op->loop.get())) return false;
 
             if(!ctx.bind_counter && body_ctx.stack.size() != ctx.stack.size()) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'while' body must be stack-neutral\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'while' body must be stack-neutral\n";
                 return false;
             }
 
@@ -345,15 +345,15 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             auto op = dynamic_cast<const uni::OpDef*>(raw_op);
 
             if(ctx.bind_counter) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "Nested word definitions are not allowed\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Nested word definitions are not allowed\n";
                 return false;
             }
 
             std::string_view name = op->name;
             if(uni::lookupWord(name)) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "Duplicate word '" << op->name << "'\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Duplicate word '" << op->name << "'\n";
                 return false;
             }
 
@@ -411,8 +411,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             if(ctx.is_global) {
                 uni::Type bind_type;
                 if(!resolveTypeName(op->type_name, &bind_type)) {
-                    std::cout   << "[ERROR] (line " << raw_op->line
-                                << "Unknown type name for variable: '"
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Unknown type name for variable: '"
                                 << op->type_name << "'\n";
                     return false;
                 }
@@ -441,27 +441,27 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 }
             );
             if(var == ctx.variables.end()) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << " Unknown variable '" << op->name << "'\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Unknown variable '" << op->name << "'\n";
                 return false;
             }
 
             if(!var->is_mut) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "Cannot store into immutable variable '" << op->name << "'\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Cannot store into immutable variable '" << op->name << "'\n";
                 return false;
             }
 
             if(ctx.stack.size() == 0) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'store' required a value on the stack\n";
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'store' required a value on the stack\n";
                 return false;
             }
 
             uni::Type actual = tc_pop(ctx);
             if(actual.kind != var->type.kind) {
-                std::cout   << "[ERROR] (line " << raw_op->line
-                            << "'store' type mismatch: "
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'store' type mismatch: "
                             << "expected " << type_name(var->type.kind)
                             << " but got " << type_name(actual.kind) << '\n';
                 return false;

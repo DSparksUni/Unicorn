@@ -29,7 +29,7 @@ namespace uni {
         std::vector<Type> inputs;
         std::vector<Type> outputs;
         void (*emit)(Emitter& emitter);
-        const Op* body;
+        Op* body;
     };
 
     void registerWord(Word word);

@@ -7,13 +7,13 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "typecheck.hpp"
+#include "emitter.hpp"
 
 struct Input {
     std::string in_file;
     std::string out_file;
 };
 std::optional<Input> parse_args(int argc, char** argv);
-
 
 int main(int argc, char** argv) {
     auto parsed_input = parse_args(argc, argv);
@@ -22,17 +22,28 @@ int main(int argc, char** argv) {
 
     auto read_result = uni::readFile(input.in_file);
     if(!read_result) {
-        std::cout << "[ERROR] Failed to read file '" << input.in_file << "'\n";
+        std::cerr << "[ERROR] Failed to read file '" << input.in_file << "'\n";
         return -1;
     }
     std::string input_content = read_result.value();
 
-    std::vector<uni::Token> tokens = uni::lex(input_content);
+    auto lex_result = uni::lex(input_content);
+    if(!lex_result) return -1;
+    std::vector<uni::Token> tokens = lex_result.value();
 
     uni::Parser parser(tokens);
     std::unique_ptr<uni::OpBlock> program = parser.parseProgram();
+    if(!program) return -1;
 
     if(!uni::typecheck(program.get())) return -1;
+
+    uni::Emitter emitter;
+    uni::emitProgram(emitter, program.get());
+    uni::writeProgram(emitter, "out.ll");
+
+    std::string cmd = "clang -O1 out.ll -o " + input.out_file;
+    std::system(cmd.c_str());
+    std::remove("out.ll");
 
     return 0;
 }
@@ -50,7 +61,7 @@ std::optional<Input> parse_args(int argc, char** argv) {
     try {
         args_result = options.parse(argc, argv);
     } catch(cxxopts::exceptions::exception e) {
-        std::cout << "[ERROR] " << e.what() << '\n';
+        std::cerr << "[ERROR] " << e.what() << '\n';
         return std::nullopt;
     }
 
@@ -60,7 +71,7 @@ std::optional<Input> parse_args(int argc, char** argv) {
     }
 
     if(!args_result.count("in-file")) {
-        std::cout << "[ERROR] No input file supplied...\n";
+        std::cerr << "[ERROR] No input file supplied...\n";
         return std::nullopt;
     }
 

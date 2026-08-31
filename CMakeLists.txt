@@ -4,6 +4,13 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 project(uni CXX)
 
+# Strip the debug CRT flag injected by CMake's Clang/Windows platform file
+# and replace with the release CRT, matching what the prebuilt LLVM libs were built against.
+string(REPLACE "--dependent-lib=msvcrtd" "--dependent-lib=msvcrt"
+    CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+string(REPLACE "-D_DEBUG" ""
+    CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+
 set(CMAKE_CXX_STANDARD 20)
 
 file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
@@ -33,7 +40,7 @@ target_link_options(${PROJECT_NAME} PRIVATE "-Wl,/ignore:4099")
 
 enable_testing()
 
-set(UNI_EXE $<TARGET_FILE:uni>)
+set(UNI_EXE $<TARGET_FILE:${PROJECT_NAME}>)
 set(TEST_DIR ${CMAKE_SOURCE_DIR}/test)
 
 # --- Pass tests: compile + run, check stdout ---

@@ -59,7 +59,7 @@ namespace uni {
                 auto op = std::make_unique<OpPushStr>();
                 op->type = OpType::UNI_OP_PUSH_STR;
                 op->line = tok.line;
-                op->value = tok.text;
+                op->value = std::get<std::string>(tok.value);
 
                 return op;
             } break;
@@ -73,7 +73,7 @@ namespace uni {
                 advance();
 
                 if(peek().type != TokenType::UNI_TOKEN_WORD) {
-                    std::cout   << "[ERROR] (line " << tok.line
+                    std::cerr   << "[ERROR] (line " << tok.line
                                 << ") '->' must be followed by a variable name\n";
                     return nullptr;
                 }
@@ -92,7 +92,7 @@ namespace uni {
 
                 if(tok.text == "if") {
                     if(peek().type != TokenType::UNI_TOKEN_LBRACE) {
-                        std::cout   << "[ERROR] (line " << tok.line
+                        std::cerr   << "[ERROR] (line " << tok.line
                                     << ") 'if' must be followed by a block\n";
                         return nullptr;
                     }
@@ -106,7 +106,7 @@ namespace uni {
                     if(next.type == TokenType::UNI_TOKEN_WORD && next.text == "else") {
                         advance();
                         if(peek().type != TokenType::UNI_TOKEN_LBRACE) {
-                            std::cout   << "[ERROR] (line " << next.line
+                            std::cerr   << "[ERROR] (line " << next.line
                                         << ") 'else' must be followed by a block\n";
                             return nullptr;
                         }
@@ -127,7 +127,7 @@ namespace uni {
 
                 if(tok.text == "while") {
                     if(peek().type != TokenType::UNI_TOKEN_LBRACE) {
-                        std::cout   << "[ERROR] (line " << tok.line
+                        std::cerr   << "[ERROR] (line " << tok.line
                                     << ") 'while' must be followed by a condition block\n";
                         return nullptr;
                     }
@@ -137,7 +137,7 @@ namespace uni {
                     if(!cond_body) return nullptr;
 
                     if(peek().type != TokenType::UNI_TOKEN_LBRACE) {
-                        std::cout   << "[ERROR] (line " << tok.line
+                        std::cerr   << "[ERROR] (line " << tok.line
                                     << ") 'while' condition block must be followed by a body block\n";
                         return nullptr;
                     }
@@ -157,14 +157,14 @@ namespace uni {
 
                 if(tok.text == "def") {
                     if(peek().type != TokenType::UNI_TOKEN_WORD) {
-                        std::cout   << "[ERROR] (line " << tok.line
+                        std::cerr   << "[ERROR] (line " << tok.line
                                     << ") 'def' must be followed by the word's name\n";
                         return nullptr;
                     }
                     Token name_tok = advance();
 
                     if(peek().type != TokenType::UNI_TOKEN_LBRACE) {
-                        std::cout   << "[ERROR] (line " << tok.line
+                        std::cerr   << "[ERROR] (line " << tok.line
                                     << ") 'def' names must be followed by a block\n";
                         return nullptr;
                     }
@@ -185,7 +185,7 @@ namespace uni {
                 if(tok.text == "let") {
                     bool is_mut = false;
                     if(peek().type != TokenType::UNI_TOKEN_WORD) {
-                        std::cout   << "[ERROR] (line " << tok.line
+                        std::cerr   << "[ERROR] (line " << tok.line
                                     << ") 'let' must be followed by the variable's name\n";
                         return nullptr;
                     }
@@ -195,7 +195,7 @@ namespace uni {
                     if(next.text == "mut") {
                         is_mut = true;
                         if(peek().type != TokenType::UNI_TOKEN_WORD) {
-                            std::cout   << "[ERROR] (line " << tok.line
+                            std::cerr   << "[ERROR] (line " << tok.line
                                         << ") 'let' must be followed by the variable's name\n";
                             return nullptr;
                         }
@@ -207,7 +207,7 @@ namespace uni {
 
                     std::string_view type_name;
                     if(peek().type != TokenType::UNI_TOKEN_COLON) {
-                        std::cout   << "[ERROR] (line " << tok.line
+                        std::cerr   << "[ERROR] (line " << tok.line
                                     << ") Variables must be declared with an explicit type\n";
                         return nullptr;
                     } else {
@@ -243,7 +243,7 @@ namespace uni {
         op->type = OpType::UNI_OP_BLOCK;
 
         while(
-            peek().type != TokenType::UNI_TOKEN_LBRACE &&
+            peek().type != TokenType::UNI_TOKEN_RBRACE &&
             peek().type != TokenType::UNI_TOKEN_EOF
         ) {
             std::unique_ptr<Op> child = parseOne();
@@ -252,7 +252,7 @@ namespace uni {
             op->items.push_back(std::move(child));
         }
 
-        expect(TokenType::UNI_TOKEN_LBRACE);
+        expect(TokenType::UNI_TOKEN_RBRACE);
         return op;
     }
 

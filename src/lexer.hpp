@@ -4,6 +4,7 @@
 #include <string_view>
 #include <variant>
 #include <vector>
+#include <optional>
 
 namespace uni {
     enum class TokenType {
@@ -24,10 +25,10 @@ namespace uni {
         TokenType type;
         std::string_view text;
         size_t line;
-        std::variant<int64_t, double> value;
+        std::variant<int64_t, double, std::string> value;
 
         std::string toString() const;
     };
 
-    std::vector<Token> lex(std::string_view src);
+    std::optional<std::vector<Token>> lex(std::string_view src);
 }

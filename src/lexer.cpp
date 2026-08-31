@@ -1,13 +1,17 @@
 #include "lexer.hpp"
 
 #include <cctype>
+#include <iostream>
 #include <sstream>
 #include <charconv>
 
 #include <fast_float/fast_float.h>
+#include <unordered_map>
+
+std::optional<std::string> decodeEscapes(std::string_view raw);
 
 namespace uni {
-    std::vector<Token> lex(std::string_view src) {
+    std::optional<std::vector<Token>> lex(std::string_view src) {
         std::vector<Token> tokens;
         size_t pos = 0;
         size_t line = 1;
@@ -65,7 +69,21 @@ namespace uni {
                         pos++;
                     }
                     if(pos < src.size()) pos++; // Skip closing quote
-                    tokens.push_back({TokenType::UNI_TOKEN_STRING, src.substr(start+1, pos-start-2), line});
+
+                    std::string_view raw = src.substr(start+1, pos-start-2);
+                    auto esc_result = decodeEscapes(raw);
+                    if(!esc_result) {
+                        std::cerr   << "[ERROR] (line " << line
+                                    << ") Invalid escape sequence\n";
+                        return std::nullopt;
+                    }
+
+                    tokens.push_back({
+                        TokenType::UNI_TOKEN_STRING,
+                        src.substr(start+1, pos-start-2),
+                        line,
+                        esc_result.value()
+                    });
                 } break;
 
                 default: {
@@ -84,7 +102,7 @@ namespace uni {
 
                         const char* win_ptr;
                         TokenType type;
-                        std::variant<int64_t, double> val;
+                        std::variant<int64_t, double, std::string> val;
                         if(int_result.ec == std::errc{} && flt_result.ptr == int_result.ptr) {
                             type = TokenType::UNI_TOKEN_INT;
                             win_ptr = int_result.ptr;
@@ -146,3 +164,31 @@ namespace uni {
         return str.str();
     }
 }
+
+std::optional<std::string> decodeEscapes(std::string_view raw) {
+    static const std::unordered_map<char, char> escapes = {
+        {'n', '\n'}, {'t', '\t'}, {'r', '\r'},
+        {'\\', '\\'}, {'\"', '\"'}, {'0', '\0'}
+    };
+
+    std::string out;
+    out.reserve(raw.size());
+
+    for(size_t i = 0; i < raw.size(); i++) {
+        if(raw[i] != '\\') {
+            out += raw[i];
+            continue;
+        }
+
+        if(i+1 >= raw.size()) return std::nullopt;
+
+        auto it = escapes.find(raw[i+1]);
+        if(it == escapes.end()) return std::nullopt;
+
+        out += it->second;
+        i++;
+    }
+
+    return out;
+}
+
