@@ -335,6 +335,13 @@ static void collect_strings(uni::Emitter& emitter, uni::Op* raw_op) {
             if(op->else_body) collect_strings(emitter, op->else_body.get());
         } break;
 
+        case uni::OpType::UNI_OP_WHILE: {
+            auto op = dynamic_cast<const uni::OpWhile*>(raw_op);
+
+            collect_strings(emitter, op->cond.get());
+            collect_strings(emitter, op->loop.get());
+        } break;
+
         case uni::OpType::UNI_OP_DEF: {
             auto op = dynamic_cast<const uni::OpDef*>(raw_op);
             collect_strings(emitter, op->body.get());
