@@ -1,5 +1,1 @@
-let mut x: int
-x printi "\n" prints
-
-69 ->x
-x printi "\n" prints
+10 3 + printi "\n" prints

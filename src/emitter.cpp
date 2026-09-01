@@ -37,7 +37,10 @@ namespace uni {
     }
     llvm::Value* Emitter::pop() {
         if(stack.empty()) return nullptr;
-        return stack.back();
+
+        llvm::Value* val = stack.back();
+        stack.pop_back();
+        return val;
     }
 
     bool writeProgram(Emitter& emitter, const std::string& out_path) {
@@ -89,9 +92,10 @@ namespace uni {
                     }
                 );
                 if(var_it != emitter.variables.end()) {
+                    llvm::GlobalVariable* global = llvm::cast<llvm::GlobalVariable>(var_it->ptr);
                     llvm::Value* val = emitter.builder.CreateLoad(
-                        var_it->ptr->getType(),
-                        var_it->ptr,
+                        global->getValueType(),
+                        global,
                         "load_variable"
                     );
                     emitter.push(val);
@@ -235,6 +239,7 @@ namespace uni {
                 for(size_t i = 0; i < stack_base; i++)
                     phis[i]->addIncoming(emitter.stack[i], body_end);
 
+                emitter.builder.CreateBr(cond_block);
                 emitter.builder.SetInsertPoint(end_block);
             } break;
 
