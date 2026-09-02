@@ -81,11 +81,6 @@ These are generic over any single type (`dup`/`drop`) or pair of types
 Requires LLVM, `cxxopts`, and `fast-float` (via vcpkg), CMake, and a
 C++20 compiler.
 
-```sh
-cmake --preset vcpkg
-cmake --build build
-```
-
 ## Running
 
 ```sh
