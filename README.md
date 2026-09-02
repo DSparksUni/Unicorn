@@ -1,4 +1,4 @@
-# Unicorn (`uni`)
+# [Unicorn](https://github.com/DSparksUni/Unicorn) (`uni`)
 
 A small stack-based (concatenative) programming language that compiles to
 native executables via LLVM. Programs are lexed, parsed into an AST,
