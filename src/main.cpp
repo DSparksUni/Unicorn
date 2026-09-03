@@ -36,6 +36,7 @@ SOFTWARE.
 struct Input {
     std::string in_file;
     std::string out_file;
+    bool print_tokens, print_ops;
 };
 std::optional<Input> parse_args(int argc, char** argv);
 
@@ -54,10 +55,14 @@ int main(int argc, char** argv) {
     auto lex_result = uni::lex(input_content);
     if(!lex_result) return -1;
     std::vector<uni::Token> tokens = lex_result.value();
+    if(input.print_tokens) {
+        for(const auto& tok : tokens) std::cout << tok.toString();
+    }
 
     uni::Parser parser(tokens);
     std::unique_ptr<uni::OpBlock> program = parser.parseProgram();
     if(!program) return -1;
+    if(input.print_ops) std::cout << uni::opToString(program.get()) << '\n';
 
     if(!uni::typecheck(program.get())) return -1;
 
@@ -78,6 +83,8 @@ std::optional<Input> parse_args(int argc, char** argv) {
         ("in-file", "Input file", cxxopts::value<std::string>())
         ("o,out-file", "Output file", cxxopts::value<std::string>()->default_value("out.exe"))
         ("h,help", "Print help message")
+        ("print-tokens", "Print generated tokens")
+        ("print-ops", "Print generated ast")
     ;
     options.parse_positional({"in-file"});
 
@@ -101,6 +108,8 @@ std::optional<Input> parse_args(int argc, char** argv) {
 
     return Input{
         .in_file{args_result["in-file"].as<std::string>()},
-        .out_file{args_result["out-file"].as<std::string>()}
+        .out_file{args_result["out-file"].as<std::string>()},
+        .print_tokens = args_result.contains("print-tokens"),
+        .print_ops = args_result.contains("print-ops"),
     };
 }
