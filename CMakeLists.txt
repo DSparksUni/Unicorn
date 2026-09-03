@@ -1,15 +1,17 @@
 cmake_minimum_required(VERSION 3.10)
 
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-
 project(uni CXX)
 
-# Strip the debug CRT flag injected by CMake's Clang/Windows platform file
-# and replace with the release CRT, matching what the prebuilt LLVM libs were built against.
-string(REPLACE "--dependent-lib=msvcrtd" "--dependent-lib=msvcrt"
-    CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
-string(REPLACE "-D_DEBUG" ""
-    CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+if (WIN32)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+    # Strip the debug CRT flag injected by CMake's Clang/Windows platform file
+    # and replace with the release CRT, matching what the prebuilt LLVM libs were built against.
+    string(REPLACE "--dependent-lib=msvcrtd" "--dependent-lib=msvcrt"
+        CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+    string(REPLACE "-D_DEBUG" ""
+        CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+endif (WIN32)
 
 set(CMAKE_CXX_STANDARD 20)
 
