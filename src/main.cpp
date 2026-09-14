@@ -27,11 +27,11 @@ SOFTWARE.
 
 #include <cxxopts.hpp>
 
-#include "util.hpp"
-#include "lexer.hpp"
-#include "parser.hpp"
-#include "typecheck.hpp"
-#include "emitter.hpp"
+#include "compiler/util.hpp"
+#include "compiler/lexer.hpp"
+#include "compiler/parser.hpp"
+#include "compiler/typecheck.hpp"
+#include "compiler/emitter.hpp"
 
 struct Input {
     std::string in_file;
