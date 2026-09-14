@@ -250,6 +250,118 @@ namespace uni {
                     return op;
                 }
 
+                if(tok.text == "func") {
+                    if(peek().type != TokenType::UNI_TOKEN_WORD) {
+                        std::cerr   << "[ERROR] (line " << tok.line
+                                    << ") Function declarations must be followed "
+                                    << "by the function's name\n";
+                        return nullptr;
+                    }
+                    Token name_tok = advance();
+
+                    if(peek().type != TokenType::UNI_TOKEN_LPAREN) {
+                        std::cerr   << "[ERROR] (line " << tok.line
+                                    << ") Function names must be followed by their arguments\n";
+                        return nullptr;
+                    }
+                    advance();
+
+                    auto op = std::make_unique<OpFunc>();
+                    op->type = OpType::UNI_OP_FUNC;
+                    op->line = tok.line;
+                    op->name = name_tok.text;
+
+                    while(
+                        peek().type != TokenType::UNI_TOKEN_RPAREN &&
+                        peek().type != TokenType::UNI_TOKEN_EOF
+                    ) {
+                        if(peek().type != TokenType::UNI_TOKEN_WORD) {
+                            std::cerr   << "[ERROR] (line " << tok.line
+                                        << ") Invalid argument name '" << peek().text
+                                        << "'\n";
+                            return nullptr;
+                        }
+                        Token arg_name_tok = advance();
+
+                        if(peek().type != TokenType::UNI_TOKEN_COLON) {
+                            std::cerr   << "[ERROR] (line " << tok.line
+                                        << ") Argument names must be followed by their type\n";
+                            return nullptr;
+                        }
+                        advance();
+
+                        if(peek().type != TokenType::UNI_TOKEN_WORD) {
+                            std::cerr   << "[ERROR] (line " << tok.line 
+                                        << ") Argument names must be followed by their type\n";
+                            return nullptr;
+                        }
+                        Token type_name_tok = advance();
+
+                        if(
+                            peek().type != TokenType::UNI_TOKEN_COMMA &&
+                            peek().type != TokenType::UNI_TOKEN_RPAREN
+                        ) {
+                            std::cerr   << "[ERROR] (line " << tok.line
+                                        << ") Unexpected token '" << peek().text
+                                        << "'\n";
+                            return nullptr;
+                        }
+
+                        if(peek().type == TokenType::UNI_TOKEN_COMMA) advance();
+
+                        op->args.emplace_back(arg_name_tok.text, type_name_tok.text);
+                    }
+
+                    if(peek().type != TokenType::UNI_TOKEN_RPAREN) {
+                        std::cerr   << "[ERROR] (line " << tok.line
+                                    << ") Unterminated function argument list\n";
+                        return nullptr;
+                    }
+                    advance();
+
+                    if(peek().type == TokenType::UNI_TOKEN_COLON) {
+                        advance();
+
+                        while(
+                            peek().type != TokenType::UNI_TOKEN_LBRACE &&
+                            peek().type != TokenType::UNI_TOKEN_EOF
+                        ) {
+                            if(peek().type != TokenType::UNI_TOKEN_WORD) {
+                                std::cerr   << "[ERROR] (line " << tok.line
+                                            << ") Invalid return type '" << peek().text
+                                            << "'\n";
+                                return nullptr;
+                            }
+                            Token type_name_tok = advance();
+
+                            op->rets.push_back(type_name_tok.text);
+
+                            if(
+                                peek().type != TokenType::UNI_TOKEN_LBRACE &&
+                                peek().type != TokenType::UNI_TOKEN_COMMA
+                            ) {
+                                std::cerr   << "[ERROR] (line " << tok.line
+                                            << ") Unterminated return type list\n";
+                                return nullptr;
+                            }
+
+                            if(peek().type == TokenType::UNI_TOKEN_COMMA) advance();
+                        }
+                    }
+
+                    if(peek().type != TokenType::UNI_TOKEN_LBRACE) {
+                        std::cerr   << "[ERROR] (line " << tok.line
+                                    << ") Function declarations must be followed by a block\n";
+                        return nullptr;
+                    }
+                    advance();
+
+                    op->body = parseBlock();
+                    if(!op->body) return nullptr;
+
+                    return op;
+                }
+
                 auto op = std::make_unique<OpWord>();
                 op->type = OpType::UNI_OP_WORD;
                 op->line = tok.line;
@@ -376,7 +488,29 @@ namespace uni {
 
             case OpType::UNI_OP_STORE: {
                 auto o = dynamic_cast<const OpStore*>(op);
-                ss  << "STORE (" << o->name << ")\n";
+                ss  << "STORE (" << o->name << "i)\n";
+            } break;
+
+            case OpType::UNI_OP_FUNC: {
+                auto o = dynamic_cast<const OpFunc*>(op);
+                ss << "FUNC (" << o->name << "):\n";
+                for(const auto& arg : o->args) {
+                    add_indent(ss, indent+4);
+                    ss << arg.name << " (" << arg.type_name << ")\n";
+                }
+
+                add_indent(ss, indent);
+                ss << ") -> (\n";
+                for(const auto& ret : o->rets) {
+                    add_indent(ss, indent+4);
+                    ss << ret << '\n';
+                }
+
+                add_indent(ss, indent);
+                ss << "):\n";
+
+                for(const auto& sub_op : o->body->items)
+                    opToString_impl(sub_op.get(), ss, indent+4);
             } break;
         }
     }

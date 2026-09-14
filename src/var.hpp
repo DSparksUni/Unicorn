@@ -35,4 +35,7 @@ namespace uni {
         bool is_mut;
         bool is_global;
     };
+
+    void registerVariable(Variable var);
+    Variable* lookupVariable(std::string_view name);
 }

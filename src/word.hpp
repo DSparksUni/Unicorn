@@ -24,6 +24,8 @@ SOFTWARE.
 
 #pragma once
 
+#include <llvm/IR/Function.h>
+
 #include "parser.hpp"
 
 namespace uni {
@@ -53,6 +55,7 @@ namespace uni {
         std::vector<Type> inputs;
         std::vector<Type> outputs;
         void (*emit)(Emitter& emitter);
+        llvm::Function* func;
         Op* body;
     };
 

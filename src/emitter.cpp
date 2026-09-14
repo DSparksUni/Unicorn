@@ -33,6 +33,8 @@ SOFTWARE.
 #include "llvm-c/Types.h"
 
 static void collect_strings(uni::Emitter& emitter, uni::Op* raw_op);
+static void collect_function_defs(uni::Emitter& emitter, uni::Op* raw_op);
+static llvm::Type* llvmTypeFromString(llvm::LLVMContext& ctx, uni::TypeKind kind);
 
 namespace uni {
     Emitter::Emitter():
@@ -109,6 +111,17 @@ namespace uni {
             case OpType::UNI_OP_WORD: {
                 auto op = dynamic_cast<OpWord*>(raw_op);
 
+                auto local_it = std::find_if(
+                    emitter.locals.begin(), emitter.locals.end(),
+                    [op](const EmitVariable& var) {
+                        return var.name == op->name;
+                    }
+                );
+                if(local_it != emitter.locals.end()) {
+                    emitter.push(local_it->ptr);
+                    break;
+                }
+
                 auto var_it = std::find_if(
                     emitter.variables.begin(), emitter.variables.end(),
                     [op](const EmitVariable& var) {
@@ -127,7 +140,22 @@ namespace uni {
                 }
 
                 Word* word = lookupWord(op->name);
-                if(word && word->body) {
+                if(word && word->func) {
+                    std::vector<llvm::Value*> args(word->inputs.size());
+                    for(size_t i = 0; i < word->inputs.size(); i++)
+                        args[word->inputs.size() - i - 1] = emitter.pop();
+
+                    llvm::Value* call = emitter.builder.CreateCall(word->func, args);
+                    if(word->outputs.size() == 1) {
+                        emitter.push(call);
+                    } else if(word->outputs.size() > 1) {
+                        for(size_t i = 0; i < word->outputs.size(); i++) {
+                            emitter.push(
+                                emitter.builder.CreateExtractValue(call, {(unsigned)i})
+                            );
+                        }
+                    }
+                } else if(word && word->body) {
                     auto blk = dynamic_cast<OpBlock*>(word->body);
                     emitBlock(emitter, blk);
                 } else if(word) {
@@ -319,6 +347,51 @@ namespace uni {
                     );
                 }
             } break;
+
+            case OpType::UNI_OP_FUNC: {
+                auto op = dynamic_cast<const OpFunc*>(raw_op);
+                Word* word = lookupWord(op->name);
+
+                llvm::Function* prev_func = emitter.func;
+                llvm::BasicBlock* prev_block = emitter.builder.GetInsertBlock();
+                std::vector<llvm::Value*> prev_stack = std::move(emitter.stack);
+                std::vector<EmitVariable> prev_locals = std::move(emitter.locals);
+
+                emitter.func = word->func;
+                emitter.stack.clear();
+                emitter.locals.clear();
+                emitter.builder.SetInsertPoint(
+                    llvm::BasicBlock::Create(emitter.ctx, "entry", word->func)
+                );
+
+                size_t i = 0;
+                for(auto& arg : word->func->args()) {
+                    arg.setName(std::string(op->args[i].name));
+                    emitter.locals.push_back({op->args[i].name, &arg});
+                    i++;
+                }
+
+                emitBlock(emitter, op->body.get());
+
+                if(word->outputs.empty()) {
+                    emitter.builder.CreateRetVoid();
+                } else if(word->outputs.size() == 1) {
+                    emitter.builder.CreateRet(emitter.stack[0]);
+                } else {
+                    llvm::Value* agg = llvm::UndefValue::get(word->func->getReturnType());
+                    for(size_t j = 0; j < emitter.stack.size(); j++) {
+                        agg = emitter.builder.CreateInsertValue(
+                            agg, emitter.stack[j], {(unsigned)j}
+                        );
+                    }
+                    emitter.builder.CreateRet(agg);
+                }
+
+                emitter.func = prev_func;
+                emitter.builder.SetInsertPoint(prev_block);
+                emitter.stack = std::move(prev_stack);
+                emitter.locals = std::move(prev_locals);
+            } break;
         }
     }
 
@@ -328,6 +401,7 @@ namespace uni {
 
     void emitProgram(Emitter& emitter, OpBlock* program) {
         collect_strings(emitter, program);
+        collect_function_defs(emitter, program);
 
         emitBlock(emitter, program);
 
@@ -371,6 +445,63 @@ static void collect_strings(uni::Emitter& emitter, uni::Op* raw_op) {
             collect_strings(emitter, op->body.get());
         } break;
 
+        case uni::OpType::UNI_OP_FUNC: {
+            auto op = dynamic_cast<const uni::OpFunc*>(raw_op);
+            collect_strings(emitter, op->body.get());
+        } break;
+
         default: break;
     }
 }
+
+static void collect_function_defs(uni::Emitter& emitter, uni::Op* raw_op) {
+    switch(raw_op->type) {
+        case uni::OpType::UNI_OP_BLOCK: {
+            auto op = dynamic_cast<uni::OpBlock*>(raw_op);
+            for(auto& o : op->items) collect_function_defs(emitter, o.get());
+        } break;
+
+        case uni::OpType::UNI_OP_FUNC: {
+            auto op = dynamic_cast<const uni::OpFunc*>(raw_op);
+            uni::Word* word = uni::lookupWord(op->name);
+
+            std::vector<llvm::Type*> param_types;
+            for(auto& t : word->inputs)
+                param_types.push_back(llvmTypeFromString(emitter.ctx, t.kind));
+
+            llvm::Type* ret_type;
+            if(word->outputs.empty()) {
+                ret_type = llvm::Type::getVoidTy(emitter.ctx);
+            } else if(word->outputs.size() == 1) {
+                ret_type = llvmTypeFromString(emitter.ctx, word->outputs[0].kind);
+            } else {
+                std::vector<llvm::Type*> field_types;
+                for(auto& t : word->outputs)
+                    field_types.push_back(llvmTypeFromString(emitter.ctx, t.kind));
+                ret_type = llvm::StructType::get(emitter.ctx, field_types);
+            }
+
+            llvm::Function* fn = llvm::Function::Create(
+                llvm::FunctionType::get(ret_type, param_types, false),
+                llvm::Function::ExternalLinkage,
+                std::string(op->name),
+                emitter.module.get()
+            );
+            word->func = fn;
+        } break;
+
+        default: break;
+    }
+}
+
+static llvm::Type* llvmTypeFromString(llvm::LLVMContext& ctx, uni::TypeKind kind) {
+    switch(kind) {
+        case uni::TypeKind::UNI_KIND_INT:       return llvm::Type::getInt64Ty(ctx);
+        case uni::TypeKind::UNI_KIND_FLOAT:     return llvm::Type::getDoubleTy(ctx);
+        case uni::TypeKind::UNI_KIND_STRING:    return llvm::PointerType::get(ctx, 0);
+
+        case uni::TypeKind::UNI_KIND_NUM:
+        case uni::TypeKind::UNI_KIND_VAR:       return nullptr;
+    }
+}
+

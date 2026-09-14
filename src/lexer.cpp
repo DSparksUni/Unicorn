@@ -86,6 +86,11 @@ namespace uni {
                     pos++;
                 } break;
 
+                case ',': {
+                    tokens.push_back({TokenType::UNI_TOKEN_COMMA, src.substr(pos, 1), line});
+                    pos++;
+                } break;
+
                 case '\"': {
                     pos++;  // Skip opening quote
                     while(pos < src.size() && peek() != '\"') {
@@ -149,7 +154,7 @@ namespace uni {
                         while(pos < src.size() && (
                             peek() != ' ' && peek() != '\t' && peek() != '\r' && peek() != '\n' &&
                             peek() != '(' && peek() != ')' && peek() != '{' && peek() != '}' &&
-                            peek() != '\"' && peek() != ':'
+                            peek() != '\"' && peek() != ':' && peek() != ','
                         )) pos++;
 
                         tokens.push_back({TokenType::UNI_TOKEN_WORD, src.substr(start, pos-start), line});
@@ -179,6 +184,7 @@ namespace uni {
             case TokenType::UNI_TOKEN_RBRACE:  str << "RBRACE\n"; break;
             case TokenType::UNI_TOKEN_COLON:   str << "COLON\n";  break;
             case TokenType::UNI_TOKEN_ARROW:   str << "ARROW\n";  break;
+            case TokenType::UNI_TOKEN_COMMA:   str << "COMMA\n";  break;
             case TokenType::UNI_TOKEN_EOF:     str << "EOF\n";    break;
         }
 

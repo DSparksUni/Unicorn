@@ -101,11 +101,11 @@ static void tc_cloneCtx(uni::TcContext& ctx, uni::TcContext& dst, size_t* bind_c
     dst.stack = ctx.stack;
     dst.bind_counter = ctx.bind_counter? bind_counter : nullptr;
     dst.variables = ctx.variables;
-    dst.is_global = ctx.is_global;
+    dst.is_global = false;
 }
 #define CLONE_CTX(dst, src)                             \
     uni::TcContext dst;                                 \
-    size_t dst##_local_bind_counter_ = 0;             \
+    size_t dst##_local_bind_counter_ = 0;               \
     tc_cloneCtx(src, dst, &dst##_local_bind_counter_)
 
 static bool tc_apply_word(
@@ -239,14 +239,20 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
         case uni::OpType::UNI_OP_WORD: {
             auto op = dynamic_cast<const uni::OpWord*>(raw_op);
 
-            auto var = std::find_if(
+            auto local_var = std::find_if(
                 ctx.variables.begin(), ctx.variables.end(),
                 [op](const uni::Variable& v) {
                     return v.name == op->name;
                 }
             );
-            if(var != ctx.variables.end()) {
-                tc_push(ctx.stack, var->type);
+            if(local_var != ctx.variables.end()) {
+                tc_push(ctx.stack, local_var->type);
+                return true;
+            }
+
+            auto global_var = uni::lookupVariable(op->name);
+            if(global_var != nullptr) {
+                tc_push(ctx.stack, global_var->type);
                 return true;
             }
 
@@ -368,9 +374,9 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
         case uni::OpType::UNI_OP_DEF: {
             auto op = dynamic_cast<const uni::OpDef*>(raw_op);
 
-            if(ctx.bind_counter) {
+            if(!ctx.is_global) {
                 std::cerr   << "[ERROR] (line " << raw_op->line
-                            << ") Nested word definitions are not allowed\n";
+                            << ") Non-global word definitions are not allowed\n";
                 return false;
             }
 
@@ -422,6 +428,7 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 name,
                 inputs, outputs,
                 nullptr,
+                nullptr,
                 op->body.get()
             };
             uni::registerWord(word);
@@ -441,7 +448,7 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                     return false;
                 }
 
-                ctx.variables.push_back({
+                uni::registerVariable({
                     .name = op->name,
                     .type = bind_type,
                     .is_mut = op->is_mut,
@@ -451,6 +458,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 return true;
             } else {
                 // TODO: For now, all bindings will be global until functions are implemented
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Non-local variables are not implemented...\n";
                 return false;
             }
         }
@@ -458,16 +467,22 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
         case uni::OpType::UNI_OP_STORE: {
             auto op = dynamic_cast<const uni::OpStore*>(raw_op);
 
-            auto var = std::find_if(
+            uni::Variable* var = nullptr;
+            auto var_it = std::find_if(
                 ctx.variables.begin(), ctx.variables.end(),
                 [op](const uni::Variable& var) {
                     return var.name == op->name;
                 }
             );
-            if(var == ctx.variables.end()) {
-                std::cerr   << "[ERROR] (line " << raw_op->line
-                            << ") Unknown variable '" << op->name << "'\n";
-                return false;
+            if(var_it == ctx.variables.end()) {
+                var = uni::lookupVariable(op->name);
+                if(var == nullptr) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Unknown variable '" << op->name << "'\n";
+                    return false;
+                }
+            } else {
+                var = &*var_it;
             }
 
             if(!var->is_mut) {
@@ -493,6 +508,93 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             return true;
         }
+
+        case uni::OpType::UNI_OP_FUNC: {
+            auto op = dynamic_cast<const uni::OpFunc*>(raw_op);
+
+            if(!ctx.is_global) {
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Non-global functions are not allowed\n";
+                return false;
+            }
+
+            if(uni::lookupWord(op->name)) {
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Duplicate word '" << op->name << "'\n";
+                return false;
+            }
+
+            std::vector<uni::Type> inputs;
+            std::vector<uni::Variable> args;
+            for(const auto& arg : op->args) {
+                uni::Type type;
+                if(!resolveTypeName(arg.type_name, &type)) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Unknown type '" << arg.type_name << "'\n";
+                    return false;
+                }
+                inputs.push_back(type);
+
+                if(std::find_if(
+                    args.begin(), args.end(),
+                    [arg](const uni::Variable& word) {
+                        return word.name == arg.name;
+                    }
+                ) != args.end()) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Duplicate argument name '" << arg.name << "'\n";
+                    return false;
+                }
+                args.push_back({arg.name, type, false, false});
+            }
+
+            std::vector<uni::Type> outputs;
+            for(const auto& ret : op->rets) {
+                uni::Type type;
+                if(!resolveTypeName(ret, &type)) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Unknown type '" << ret << "'\n";
+                    return false;
+                }
+
+                outputs.push_back(type);
+            }
+
+            uni::Word word{
+                op->name,
+                inputs, outputs,
+                nullptr,
+                nullptr,
+                op->body.get()
+            };
+            uni::registerWord(std::move(word));
+
+            uni::TcContext body_ctx{
+                .variables = std::move(args),
+                .is_global = false
+            };
+            if(!tc_block(body_ctx, op->body.get())) return false;
+
+            if(body_ctx.stack.size() != outputs.size()) {
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") '" << op->name << "' Return mismatch: "
+                            << "Expected " << outputs.size() << " value(s) but received "
+                            << body_ctx.stack.size() << '\n';
+                return false;
+            }
+            for(size_t i = 0; i < outputs.size(); i++) {
+                if(!tc_kinds_compatible(outputs[i].kind, body_ctx.stack[i].kind)) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") '" << op->name << "' type mismatch: "
+                                << "expected " << type_name(outputs[i].kind)
+                                << " but got " << type_name(body_ctx.stack[i].kind)
+                                << '\n';
+                    return false;
+                }
+            }
+
+            return true;
+        };
     }
 }
 

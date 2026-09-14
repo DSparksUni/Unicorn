@@ -47,6 +47,7 @@ namespace uni {
         std::vector<llvm::GlobalVariable*> str_globals;
         std::vector<llvm::Value*> stack;
 
+        std::vector<EmitVariable> locals;
         std::vector<EmitVariable> variables;
 
         llvm::FunctionCallee printf_fn;

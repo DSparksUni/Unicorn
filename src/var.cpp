@@ -22,38 +22,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#pragma once
+#include "var.hpp"
 
-#include <string>
-#include <string_view>
-#include <variant>
-#include <vector>
-#include <optional>
+static std::vector<uni::Variable> var_table;
 
 namespace uni {
-    enum class TokenType {
-        UNI_TOKEN_NULL,
-        UNI_TOKEN_INT,
-        UNI_TOKEN_FLOAT,
-        UNI_TOKEN_STRING,
-        UNI_TOKEN_WORD,
-        UNI_TOKEN_LPAREN,
-        UNI_TOKEN_RPAREN,
-        UNI_TOKEN_LBRACE,
-        UNI_TOKEN_RBRACE,
-        UNI_TOKEN_COLON,
-        UNI_TOKEN_ARROW,
-        UNI_TOKEN_COMMA,
-        UNI_TOKEN_EOF
-    };
-    struct Token {
-        TokenType type;
-        std::string_view text;
-        size_t line;
-        std::variant<int64_t, double, std::string> value;
+    void registerVariable(Variable var) {
+        var_table.push_back(var);
+    }
 
-        std::string toString() const;
-    };
+    Variable* lookupVariable(std::string_view name) {
+        auto result = std::find_if(
+            var_table.begin(), var_table.end(),
+            [name](const Variable& var) {
+                return var.name == name;
+            }
+        );
 
-    std::optional<std::vector<Token>> lex(std::string_view src);
+        return (result != var_table.end())? &*result : nullptr;
+    }
 }
+

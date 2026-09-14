@@ -39,7 +39,8 @@ namespace uni {
         UNI_OP_WHILE,
         UNI_OP_DEF,
         UNI_OP_LET,
-        UNI_OP_STORE
+        UNI_OP_STORE,
+        UNI_OP_FUNC
     };
 
     struct Op {
@@ -113,6 +114,20 @@ namespace uni {
         std::string_view name;
 
         virtual ~OpStore() = default;
+    };
+
+    struct OpFunc : Op {
+        struct FuncArg {
+            std::string_view name;
+            std::string_view type_name;
+        };
+
+        std::string_view name;
+        std::vector<FuncArg> args;
+        std::vector<std::string_view> rets;
+        std::unique_ptr<OpBlock> body;
+
+        virtual ~OpFunc() = default;
     };
 
     class Parser {
