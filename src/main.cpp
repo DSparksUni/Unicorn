@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include <iostream>
 #include <optional>
+#include <filesystem>
 
 #include <cxxopts.hpp>
 
@@ -32,6 +33,8 @@ SOFTWARE.
 #include "compiler/parser.hpp"
 #include "compiler/typecheck.hpp"
 #include "compiler/emitter.hpp"
+
+#include "target/target.hpp"
 
 struct Input {
     std::string in_file;
@@ -68,11 +71,17 @@ int main(int argc, char** argv) {
 
     uni::Emitter emitter;
     uni::emitProgram(emitter, program.get());
-    uni::writeProgram(emitter, "out.ll");
 
-    std::string cmd = "clang -O1 out.ll -o " + input.out_file;
-    std::system(cmd.c_str());
-    std::remove("out.ll");
+    std::string obj_path = input.out_file + ".obj";
+    if(!uni::emitObject(emitter.module.get(), obj_path)) return -1;
+
+    std::optional info_result = uni::getLibInfo();
+    if(!info_result) return -1;
+    uni::LibInfo lib_info = info_result.value();
+
+    bool link_ok = uni::link(obj_path, input.out_file, lib_info);
+    std::filesystem::remove(obj_path);
+    if(!link_ok) return -1;
 
     return 0;
 }

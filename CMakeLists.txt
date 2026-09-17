@@ -15,17 +15,36 @@ endif (WIN32)
 
 set(CMAKE_CXX_STANDARD 20)
 
-file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/*.cpp
+file(GLOB PROJECT_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/main.cpp
+    ${CMAKE_SOURCE_DIR}/src/compiler/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/target/*.cpp
 )
 
+if(WIN32)
+    file(GLOB PLATFORM_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_SOURCE_DIR}/src/target/win32/*.cpp
+    )
+elseif(APPLE)
+    file(GLOB PLATFORM_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_SOURCE_DIR}/src/target/macos/*.cpp
+    )
+elseif(UNIX)
+    file(GLOB PLATFORM_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_SOURCE_DIR}/src/target/linux/*.cpp
+    )
+endif()
+
+list(APPEND PROJECT_SOURCES ${PLATFORM_SOURCES})
+
 find_package(LLVM CONFIG REQUIRED)
+find_package(LLD CONFIG REQUIRED)
 find_package(cxxopts CONFIG REQUIRED)
 find_package(FastFloat CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${LLVM_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PRIVATE ${LLVM_INCLUDE_DIRS} ${LLD_INCLUDE_DIRS})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
 target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -34,6 +53,7 @@ llvm_map_components_to_libnames(llvm_libs
     Core
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE ${llvm_libs})
+target_link_libraries(${PROJECT_NAME} PRIVATE lldCommon lldCOFF)
 target_link_libraries(${PROJECT_NAME} PRIVATE cxxopts::cxxopts)
 target_link_libraries(${PROJECT_NAME} PRIVATE FastFloat::fast_float)
 
