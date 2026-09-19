@@ -32,12 +32,14 @@ SOFTWARE.
 #include <windows.h>
 
 #include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/Triple.h>
 
 static std::tuple<unsigned, unsigned, unsigned> getVersion3(const std::string& str);
 static std::tuple<unsigned, unsigned, unsigned, unsigned> getVersion4(const std::string& str);
 
 static bool getMSVCPath(uni::LibInfo& info, const std::string& arch);
 static bool getSDKPath(uni::LibInfo& info, const std::string& arch);
+std::string getArchString(llvm::Triple::ArchType arch); 
 
 namespace uni {
     std::optional<LibInfo> getLibInfo() {
@@ -87,6 +89,17 @@ static std::tuple<unsigned, unsigned, unsigned, unsigned> getVersion4(const std:
     }
 
     return {v1, v2, v3, v4};
+}
+
+std::string getArchString(llvm::Triple::ArchType arch) {
+    switch(arch) {
+        case llvm::Triple::ArchType::x86:       return "x86";
+        case llvm::Triple::ArchType::x86_64:    return "x64";
+        case llvm::Triple::ArchType::aarch64:   return "arm64";
+        case llvm::Triple::ArchType::arm:       return "arm";
+
+        default: return "";
+    }
 }
 
 static bool getMSVCPath(uni::LibInfo& info, const std::string& arch) {

@@ -24,22 +24,10 @@ SOFTWARE.
 
 #pragma once
 
-#include <llvm/TargetParser/Triple.h>
 #include <llvm/IR/Module.h>
 
 namespace uni {
     bool emitObject(llvm::Module* module, const std::string& out_obj_path);
-
-    static inline std::string getArchString(llvm::Triple::ArchType arch) {
-        switch(arch) {
-            case llvm::Triple::ArchType::x86:       return "x86";
-            case llvm::Triple::ArchType::x86_64:    return "x64";
-            case llvm::Triple::ArchType::aarch64:   return "arm64";
-            case llvm::Triple::ArchType::arm:       return "arm";
-
-            default: return "";
-        }
-    }
 
     struct LibInfo {
         std::vector<std::string> lib_paths;
