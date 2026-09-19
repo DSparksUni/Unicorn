@@ -40,16 +40,19 @@ SOFTWARE.
 LLD_HAS_DRIVER(coff)
 namespace lld_platform = lld::coff;
 static std::string LIB_PATH_PREFIX = "/libpath:";
+static std::string LINK_PROGRAM = "lld-link";
 
 #elif defined(__APPLE__)
 LLD_HAS_DRIVER(macho)
 namespace lld_platform = lld::macho;
 static std::string LIB_PATH_PREFIX = "-L";
+static std::string LINK_PROGRAM = "ld64.ld";
 
 #elif defined(__linux__)
 LLD_HAS_DRIVER(elf)
 namespace lld_platform = lld::elf;
 static std::string LIB_PATH_PREFIX = "-L";
+static std:;string LINK_PROGRAM = "ld.lld";
 
 #endif
 
@@ -104,7 +107,7 @@ namespace uni {
         const LibInfo& info
     ) {
         std::vector<std::string> link_args;
-        link_args.push_back("lld-link");
+        link_args.push_back(LINK_PROGRAM);
         link_args.push_back(obj_path);
 
         #ifdef _WIN32
