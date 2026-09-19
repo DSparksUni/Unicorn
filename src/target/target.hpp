@@ -44,6 +44,7 @@ namespace uni {
     struct LibInfo {
         std::vector<std::string> lib_paths;
         std::vector<std::string> libs;
+        std::vector<std::string> link_args;
     };
     std::optional<LibInfo> getLibInfo();
 

@@ -76,7 +76,10 @@ int main(int argc, char** argv) {
     if(!uni::emitObject(emitter.module.get(), obj_path)) return -1;
 
     std::optional info_result = uni::getLibInfo();
-    if(!info_result) return -1;
+    if(!info_result) {
+        std::filesystem::remove(obj_path);
+        return -1;
+    }
     uni::LibInfo lib_info = info_result.value();
 
     bool link_ok = uni::link(obj_path, input.out_file, lib_info);

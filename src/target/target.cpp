@@ -25,7 +25,6 @@ SOFTWARE.
 #include "target.hpp"
 
 #include <iostream>
-#include <tuple>
 
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/MC/TargetRegistry.h>
@@ -37,7 +36,22 @@ SOFTWARE.
 #include <llvm/IR/LegacyPassManager.h>
 #include <lld/Common/Driver.h>
 
+#ifdef _WIN32
 LLD_HAS_DRIVER(coff)
+namespace lld_platform = lld::coff;
+static std::string LIB_PATH_PREFIX = "/libpath:";
+
+#elif defined(__APPLE__)
+LLD_HAS_DRIVER(macho)
+namespace lld_platform = lld::macho;
+static std::string LIB_PATH_PREFIX = "-L";
+
+#elif defined(__linux__)
+LLD_HAS_DRIVER(elf)
+namespace lld_platform = lld::elf;
+static std::string LIB_PATH_PREFIX = "-L";
+
+#endif
 
 namespace uni {
     bool emitObject(llvm::Module* module, const std::string& out_obj_path) {
@@ -92,17 +106,22 @@ namespace uni {
         std::vector<std::string> link_args;
         link_args.push_back("lld-link");
         link_args.push_back(obj_path);
-        link_args.push_back("/out:" + out_exe_path);
-        link_args.push_back("/entry:mainCRTStartup");
-        link_args.push_back("/subsystem:console");
 
-        for(auto& lp : info.lib_paths) link_args.push_back("/libpath:" + lp);
+        #ifdef _WIN32
+            link_args.push_back("/out:" + out_exe_path);
+        #else
+            link_args.push_back("-o");
+            link_args.push_back(out_exe_path);
+        #endif
+
+        for(auto& arg : info.link_args) link_args.push_back(arg);
+        for(auto& lp : info.lib_paths) link_args.push_back(LIB_PATH_PREFIX + lp);
         for(auto& l : info.libs) link_args.push_back(l);
 
         std::vector<const char*> argv;
         for(auto& arg : link_args) argv.push_back(arg.c_str());
 
-        if(!lld::coff::link(
+        if(!lld_platform::link(
             argv, llvm::outs(), llvm::errs(), false, false
         )) {
             // LLD logs its own errors, no diagnostic needed

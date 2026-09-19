@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(uni CXX)
+project(uni C CXX)
 
 if (WIN32)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -49,16 +49,25 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${LLVM_INCLUDE_DIRS} ${LLD_IN
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${LLVM_DEFINITIONS})
 target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
 
-llvm_map_components_to_libnames(llvm_libs
-    Core
-)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${llvm_libs})
-target_link_libraries(${PROJECT_NAME} PRIVATE lldCommon lldCOFF)
+if(WIN32)
+    llvm_map_components_to_libnames(llvm_libs Core)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${llvm_libs})
+else()
+    target_link_libraries(${PROJECT_NAME} PRIVATE LLVM)
+endif()
+
+target_link_libraries(${PROJECT_NAME} PRIVATE lldCommon)
 target_link_libraries(${PROJECT_NAME} PRIVATE cxxopts::cxxopts)
 target_link_libraries(${PROJECT_NAME} PRIVATE FastFloat::fast_float)
 
-target_link_options(${PROJECT_NAME} PRIVATE "-Wl,/ignore:4099")
-
+if(WIN32)
+    target_link_options(${PROJECT_NAME} PRIVATE "-Wl,/ignore:4099")
+    target_link_libraries(${PROJECT_NAME} PRIVATE lldCOFF)
+elseif(APPLE)
+    target_link_libraries(${PROJECT_NAME} PRIVATE lldMachO)
+elseif(UNIX)
+    target_link_libraries(${PROJECT_NAME} PRIVATE lldELF)
+endif()
 
 enable_testing()
 

@@ -24,7 +24,6 @@ SOFTWARE.
 
 #include "../target.hpp"
 
-#include <cstdlib>
 #include <iostream>
 
 namespace uni {

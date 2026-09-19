@@ -28,6 +28,7 @@ SOFTWARE.
 #include <iostream>
 #include <optional>
 #include <filesystem>
+#include <tuple>
 #include <windows.h>
 
 #include <llvm/TargetParser/Host.h>
@@ -53,6 +54,11 @@ namespace uni {
             "libucrt.lib",
             "kernel32.lib",
             "legacy_stdio_definitions.lib"
+        };
+
+        info.link_args = {
+            "/entry:mainCRTStartup",
+            "/subsystem:console"
         };
 
         return info;
