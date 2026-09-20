@@ -29,6 +29,7 @@ SOFTWARE.
 #include <optional>
 #include <filesystem>
 #include <tuple>
+#include <format>
 #include <windows.h>
 
 #include <llvm/TargetParser/Host.h>
@@ -37,9 +38,10 @@ SOFTWARE.
 static std::tuple<unsigned, unsigned, unsigned> getVersion3(const std::string& str);
 static std::tuple<unsigned, unsigned, unsigned, unsigned> getVersion4(const std::string& str);
 
+std::string getArchString(llvm::Triple::ArchType arch);
+
 static bool getMSVCPath(uni::LibInfo& info, const std::string& arch);
 static bool getSDKPath(uni::LibInfo& info, const std::string& arch);
-std::string getArchString(llvm::Triple::ArchType arch); 
 
 namespace uni {
     std::optional<LibInfo> getLibInfo() {
@@ -91,7 +93,7 @@ static std::tuple<unsigned, unsigned, unsigned, unsigned> getVersion4(const std:
     return {v1, v2, v3, v4};
 }
 
-std::string getArchString(llvm::Triple::ArchType arch) {
+static std::string getArchString(llvm::Triple::ArchType arch) {
     switch(arch) {
         case llvm::Triple::ArchType::x86:       return "x86";
         case llvm::Triple::ArchType::x86_64:    return "x64";
@@ -129,22 +131,48 @@ static bool getMSVCPath(uni::LibInfo& info, const std::string& arch) {
     std::tuple<unsigned, unsigned, unsigned> best_version{0, 0, 0};
     std::string best_name;
 
+    std::error_code ec;
+
     std::string msvc_root = vs_root + "/VC/Tools/MSVC";
-    if(!std::filesystem::exists(msvc_root)) {
-        std::cerr   << "[ERROR] Detected Visual Studio root does not exist\n";
+    if(!std::filesystem::exists(msvc_root, ec)) {
+        if(ec) {
+            std::cerr   << "[ERROR] Failed to fetch MSVC root: "
+                        << ec.message() << '\n';
+        } else {
+            std::cerr  << "[ERROR] Detected Visual Studio root does not exist\n";
+        }
+
         return false;
     }
 
-    for(
-        auto& entry : std::filesystem::directory_iterator(msvc_root)
+    auto dir_iter = std::filesystem::directory_iterator(msvc_root, ec);
+    if(ec) {
+        std::cerr   << "[ERROR] Failed to read directory '"
+                    << msvc_root << "': " << ec.message() << '\n';
+        return false;
+    }
+
+    for(;
+        dir_iter != std::filesystem::directory_iterator() && !ec;
+        dir_iter.increment(ec)
     ) {
-        if(!entry.is_directory()) continue;
-        auto name = entry.path().filename().string();
+        if(!dir_iter->is_directory(ec)) {
+            if(ec) break;
+            continue;
+        }
+
+        auto name = dir_iter->path().filename().string();
         auto v = getVersion3(name);
         if(v > best_version) {
             best_version = v;
             best_name = name;
         }
+    }
+
+    if(ec) {
+        std::cerr   << "[ERROR] Error occurred while traversing MSVC root: "
+                    << ec.message() << '\n';
+        return false;
     }
 
     if(best_name.empty()) {
@@ -186,22 +214,48 @@ static bool getSDKPath(uni::LibInfo& info, const std::string& arch) {
     std::tuple<unsigned, unsigned, unsigned, unsigned> best_version{0, 0, 0, 0};
     std::string best_name;
 
+    std::error_code ec;
+
     std::string sdk_lib = sdk_root + "/Lib";
-    if(!std::filesystem::exists(sdk_lib)) {
-        std::cerr   << "[ERROR] Invalid Windows SDK path\n";
+    if(!std::filesystem::exists(sdk_lib, ec)) {
+        if(ec) {
+            std::cerr   << "[ERROR] Failed to fetch Windows SDK root: "
+                        << ec.message() << '\n';
+        } else {
+            std::cerr   << "[ERROR] Invalid Windows SDK path\n";
+        }
+
         return false;
     }
 
-    for(
-        auto& entry : std::filesystem::directory_iterator(sdk_lib)
+    auto dir_iter = std::filesystem::directory_iterator(sdk_lib, ec);
+    if(ec) {
+        std::cerr   << "[ERROR] Failed to read directory '"
+                    << sdk_lib << "': " << ec.message() << '\n';
+        return false;
+    }
+
+    for(;
+        dir_iter != std::filesystem::directory_iterator() && !ec;
+        dir_iter.increment(ec)
     ) {
-        if(!entry.is_directory()) continue;
-        auto name = entry.path().filename().string();
+        if(!dir_iter->is_directory(ec)){
+            if(ec) break;
+            continue;
+        }
+
+        auto name = dir_iter->path().filename().string();
         auto v = getVersion4(name);
         if(v > best_version) {
             best_version = v;
             best_name = name;
         }
+    }
+
+    if(ec) {
+        std::cerr   << "[ERROR] Error occurred while traversing Windows SDK root: "
+                    << ec.message() << '\n';
+        return false;
     }
 
     if(best_name.empty()) {
