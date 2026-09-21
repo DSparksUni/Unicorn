@@ -1,9 +1,6 @@
 # [Unicorn](https://github.com/DSparksUni/Unicorn) (`uni`)
 
-A small stack-based (concatenative) programming language that compiles to
-native executables via LLVM. Programs are lexed, parsed into an AST,
-type-checked, then lowered to LLVM IR and handed off to `clang` for final
-codegen and linking.
+Unicorn is a small stack-based (concatenative) programming language using LLVM as a backend.
 
 ## Features
 
@@ -25,12 +22,16 @@ codegen and linking.
 - `over` — copy the second value to the top
 
 These are generic over any single type (`dup`/`drop`) or pair of types
-(`swap`/`over`), enforced via type variables in the type checker.
+(`swap`/`over`)
 
 ### I/O
-- `printi` — print an `int`
-- `printf` — print a `float`
-- `prints` — print a `string`
+```c
+  42 printi   // 42
+
+  34.9 printf // 34.9 (the 'f' in this case means float)
+
+  "Hello" prints // Hello
+```
 
 ### Control Flow
 - `if { ... }` / `if { ... } else { ... }` — branches on a leading `int`.
@@ -56,30 +57,41 @@ These are generic over any single type (`dup`/`drop`) or pair of types
   variable is an error).
 - Supported type annotations: `int`, `float`, `string`.
 
-### Type Checking
-- Static, stack-effect based type checker that runs before codegen.
-- Distinguishes `int`, `float`, `string`, a generic numeric type (`num`,
-  matched by either `int` or `float`), and type variables (for
-  polymorphic/generic words).
-- Produces descriptive `[ERROR] (line N) ...` diagnostics for: stack
-  underflow, type mismatches, unknown words/variables, unbalanced
-  `if`/`while`, duplicate/nested definitions, and unknown type names.
+### Functions (`func`)
+- `func name(<arg_name>: <arg_type>, ...): <ret_type>, ...` declares a function
+  with the specified arguments and return types.
+- Since Unicorn is stack-based, there didn't seem to be a reason not to allow
+  multiple return values, so return values can be delimited by type names and commas.
+- There is no explicit `return` (yet), so values are returned based on what items are
+  on the stack at the end of the function. The stack is required to match the return signature.
 
-### Compiler Pipeline & CLI
-- Lexer → Parser → Type checker → LLVM IR Emitter → `clang` for final
-  binary generation.
-- CLI usage: `uni <input_file> [-o <output_file>]` (defaults to `out.exe`).
+### Type Checking
+- Static, stack-effect based type checker that runs before codegen. 
+
+### CLI
+- **CLI usage:** `uni <input_file> [-o <output_file>]` (defaults to `out.exe`).
+- **Additional Options:**
+  - `-h (--help) Prints a help message`
+  - `--print-tokens Prints the generated token stream`
+  - `--print-ops Prints the generated AST`
+  - `-O (--opt-level) Sets the optimization level (0, 1, 2, 3, s, z)`
 
 ## Work in Progress
-- `func` (named, typed functions with explicit argument/return lists) is
-  partially parsed but not yet type-checked or code-generated.
 - Local (non-global) `let` bindings are parsed but rejected by the type
   checker — all variables are currently global.
+- Currently, there is no way to declare and initialize a `let` binding in one
+  statement. The current method would be `let x: int` and then `42 ->x`, but 
+  having `let x: int = 42` would be more convenient.
+- If explicitly assigning a `let` binding, the type should be allowed to be deduced.
+- An `return` keyword to explicitly return from a function. This won't change
+  the stack return at the end of the function, but allowing an early-exit would
+  make sense.
+- Changing the syntax of `if` to match `while` would be more in-line with other
+  programming languages, and would allow for `elif`.
 
 ## Building
 
-Requires LLVM, `cxxopts`, and `fast-float` (via vcpkg), CMake, and a
-C++20 compiler.
+Requires LLVM, LLD, `cxxopts`, and `fast-float`, CMake, and a C++20 compiler.
 
 ## Running
 
@@ -90,11 +102,7 @@ uni program.uni -o program.exe
 
 ## Testing
 
-The test suite (driven by CTest) compiles and runs each `.uni` file under
-`test/pass` and checks its output against a corresponding `.expected`
-file, and compiles each file under `test/fail` expecting a compile error
-matching the corresponding `.expected` regex.
-
+The test suite is driven by ctest, and can be run as:
 ```sh
-ctest --test-dir build
+ctest --test-dir <DIR>
 ```
