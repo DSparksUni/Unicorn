@@ -87,11 +87,13 @@ These are generic over any single type (`dup`/`drop`) or pair of types
   statement. The current method would be `let x: int` and then `42 ->x`, but 
   having `let x: int = 42` would be more convenient.
 - If explicitly assigning a `let` binding, the type should be allowed to be deduced.
-- An `return` keyword to explicitly return from a function. This won't change
+- A `return` keyword to explicitly return from a function. This won't change
   the stack return at the end of the function, but allowing an early-exit would
   make sense.
 - Changing the syntax of `if` to match `while` would be more in-line with other
   programming languages, and would allow for `elif`.
+- Currently, there is only a linker implementation for windows. Linux is actively
+  being worked on, and MacOS will come next.
 
 ## Building
 
