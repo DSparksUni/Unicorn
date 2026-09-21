@@ -1,9 +1,10 @@
 <p align="center">
   <img src="assets/logo.png" alt="Mascot" width="200"   height="200">
 </p> 
+
 # [Unicorn](https://github.com/DSparksUni/Unicorn) (`uni`)
 
-# Unicorn is a small stack-based (concatenative) programming language using LLVM as a backend.
+Unicorn is a small stack-based (concatenative) programming language using LLVM as a backend.
 
 ## Features
 
