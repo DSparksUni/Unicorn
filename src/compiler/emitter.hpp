@@ -64,5 +64,5 @@ namespace uni {
 
     void emitOp(Emitter& emitter, Op* op);
     void emitBlock(Emitter& emitter, OpBlock* block);
-    void emitProgram(Emitter& emitter, OpBlock* program);
+    bool emitProgram(Emitter& emitter, OpBlock* program);
 }

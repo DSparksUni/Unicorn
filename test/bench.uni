@@ -1,0 +1,109 @@
+let mut acc: int
+let mut i: int
+let mut j: int
+let mut total: int
+let mut fl: float
+
+def inc { 1 + }
+def inc2 { inc inc }
+def inc4 { inc2 inc2 }
+def inc8 { inc4 inc4 }
+def inc16 { inc8 inc8 }
+def inc32 { inc16 inc16 }
+def inc64 { inc32 inc32 }
+def inc128 { inc64 inc64 }
+def inc256 { inc128 inc128 }
+def inc512 { inc256 inc256 }
+def inc1024 { inc512 inc512 }
+def inc2048 { inc1024 inc1024 }
+def inc4096 { inc2048 inc2048 }
+def inc8192 { inc4096 inc4096 }
+def inc16384 { inc8192 inc8192 }
+def inc32768 { inc16384 inc16384 }
+def inc65536 { inc32768 inc32768 }
+
+def fstep { 1.0001 * }
+def fstep2 { fstep fstep }
+def fstep4 { fstep2 fstep2 }
+def fstep8 { fstep4 fstep4 }
+def fstep16 { fstep8 fstep8 }
+def fstep32 { fstep16 fstep16 }
+def fstep64 { fstep32 fstep32 }
+def fstep128 { fstep64 fstep64 }
+def fstep256 { fstep128 fstep128 }
+def fstep512 { fstep256 fstep256 }
+def fstep1024 { fstep512 fstep512 }
+def fstep2048 { fstep1024 fstep1024 }
+def fstep4096 { fstep2048 fstep2048 }
+
+def spin {
+    0 ->j
+    while { j 10 < } {
+        total 1 + ->total
+        j 1 + ->j
+    }
+}
+def spin2 { spin spin }
+def spin4 { spin2 spin2 }
+def spin8 { spin4 spin4 }
+def spin16 { spin8 spin8 }
+def spin32 { spin16 spin16 }
+def spin64 { spin32 spin32 }
+def spin128 { spin64 spin64 }
+def spin256 { spin128 spin128 }
+def spin512 { spin256 spin256 }
+def spin1024 { spin512 spin512 }
+
+func mix(a: int, b: int): int {
+    a b + a b - *
+}
+
+"inc chain: " prints
+0 ->acc
+acc inc65536 ->acc
+acc printi "\n" prints
+
+"nested loops: " prints
+0 ->total
+0 ->i
+while { i 200 < } {
+    0 ->j
+    while { j 200 < } {
+        total inc16 ->total
+        j 1 + ->j
+    }
+    i 1 + ->i
+}
+total printi "\n" prints
+
+"branches: " prints
+0 ->total
+0 ->i
+while { i 20000 < } {
+    i i 3 / 3 * - 0 == if {
+        total inc64 ->total
+    } else {
+        total 1 - ->total
+    }
+    i 1 + ->i
+}
+total printi "\n" prints
+
+"floats: " prints
+1.0 ->fl
+fl fstep4096 ->fl
+fl printf "\n" prints
+
+"spin: " prints
+0 ->total
+spin1024
+total printi "\n" prints
+
+"func calls: " prints
+0 ->total
+0 ->i
+while { i 50000 < } {
+    i 7 mix total + ->total
+    i 1 + ->i
+}
+total printi "\n" prints

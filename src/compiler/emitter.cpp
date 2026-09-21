@@ -28,6 +28,7 @@ SOFTWARE.
 #include <system_error>
 
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/IR/Verifier.h>
 
 #include "word.hpp"
 #include "llvm-c/Types.h"
@@ -399,7 +400,7 @@ namespace uni {
         for(auto& op : block->items) emitOp(emitter, op.get());
     }
 
-    void emitProgram(Emitter& emitter, OpBlock* program) {
+    bool emitProgram(Emitter& emitter, OpBlock* program) {
         collect_strings(emitter, program);
         collect_function_defs(emitter, program);
 
@@ -408,6 +409,8 @@ namespace uni {
         emitter.builder.CreateRet(
             llvm::ConstantInt::get(llvm::Type::getInt32Ty(emitter.ctx), 0, true)
         );
+
+        return !llvm::verifyModule(*emitter.module, &llvm::errs());
     }
 }
 

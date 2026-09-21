@@ -1,6 +1,6 @@
 # Compile
 execute_process(
-    COMMAND ${UNI_EXE} ${UNI_FILE} -o ${OUT_EXE}
+    COMMAND ${UNI_EXE} ${UNI_FILE} -o ${OUT_EXE} --opt-level=${OPT_LEVEL}
     RESULT_VARIABLE COMPILE_RESULT
     ERROR_VARIABLE COMPILE_STDERR
 )

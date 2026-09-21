@@ -40,6 +40,7 @@ struct Input {
     std::string in_file;
     std::string out_file;
     bool print_tokens, print_ops;
+    llvm::OptimizationLevel opt_level;
 };
 std::optional<Input> parse_args(int argc, char** argv);
 
@@ -70,10 +71,17 @@ int main(int argc, char** argv) {
     if(!uni::typecheck(program.get())) return -1;
 
     uni::Emitter emitter;
-    uni::emitProgram(emitter, program.get());
+    if(!uni::emitProgram(emitter, program.get())) return -1;
+
+    std::unique_ptr<llvm::TargetMachine> target = uni::getSystemInfo(
+        emitter.module.get(), input.opt_level
+    );
+    if(!target) return -1;
+
+    if(!uni::optimize(emitter.module.get(), target.get(), input.opt_level)) return -1;
 
     std::string obj_path = input.out_file + ".obj";
-    if(!uni::emitObject(emitter.module.get(), obj_path)) return -1;
+    if(!uni::emitObject(emitter.module.get(), target.get(), obj_path)) return -1;
 
     std::optional info_result = uni::getLibInfo();
     if(!info_result) {
@@ -97,6 +105,10 @@ std::optional<Input> parse_args(int argc, char** argv) {
         ("h,help", "Print help message")
         ("print-tokens", "Print generated tokens")
         ("print-ops", "Print generated ast")
+        (
+            "O,opt-level", "Optimization level (0, 1, 2, 3, s, z)",
+            cxxopts::value<std::string>()->default_value("2")
+        )
     ;
     options.parse_positional({"in-file"});
 
@@ -118,10 +130,20 @@ std::optional<Input> parse_args(int argc, char** argv) {
         return std::nullopt;
     }
 
+    std::string opt_level_str = args_result["opt-level"].as<std::string>();
+    auto opt_result = uni::getOptLevelFromString(opt_level_str);
+    if(!opt_result) {
+        std::cerr   << "[ERROR] Invalid optimization level '"
+                    << opt_level_str << "'\n";
+        return std::nullopt;
+    }
+    llvm::OptimizationLevel opt_level = opt_result.value();
+
     return Input{
         .in_file{args_result["in-file"].as<std::string>()},
         .out_file{args_result["out-file"].as<std::string>()},
         .print_tokens = args_result.contains("print-tokens"),
         .print_ops = args_result.contains("print-ops"),
+        .opt_level = opt_level,
     };
 }
