@@ -1,4 +1,4 @@
-# [Unicorn](https://github.com/DSparksUni/Unicorn) (`uni`)
+# ![logo.png](assets/logo.png) [Unicorn](https://github.com/DSparksUni/Unicorn) (`uni`)
 
 Unicorn is a small stack-based (concatenative) programming language using LLVM as a backend.
 
