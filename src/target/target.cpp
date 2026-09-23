@@ -25,6 +25,7 @@ SOFTWARE.
 #include "target.hpp"
 
 #include <iostream>
+#include <filesystem>
 
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/MC/TargetRegistry.h>
@@ -60,6 +61,10 @@ static std::string LINK_PROGRAM = "ld.lld";
 static llvm::CodeGenOptLevel getOptLevel(llvm::OptimizationLevel opt);
 
 namespace uni {
+    TempFile::~TempFile() {
+        std::filesystem::remove(path);
+    }
+
     std::unique_ptr<llvm::TargetMachine> getSystemInfo(
         llvm::Module* module,
         llvm::OptimizationLevel opt_level

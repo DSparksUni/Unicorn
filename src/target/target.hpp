@@ -34,6 +34,11 @@ SOFTWARE.
 #include <llvm/Passes/OptimizationLevel.h>
 
 namespace uni {
+    struct TempFile {
+        const std::string& path;
+        ~TempFile();
+    };
+
     static inline std::optional<llvm::OptimizationLevel> getOptLevelFromString(
         const std::string& str
     ) {
