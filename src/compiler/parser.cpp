@@ -23,6 +23,7 @@ SOFTWARE.
 */
 
 #include "parser.hpp"
+#include "lexer.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -245,7 +246,28 @@ namespace uni {
                     op->line = tok.line;
                     op->name = name;
                     op->type_name = type_name;
+                    op->init = nullptr;
                     op->is_mut = is_mut;
+
+                    if(
+                        peek().type == TokenType::UNI_TOKEN_WORD &&
+                        peek().text == "="
+                    ) {
+                        advance();
+
+                        if(peek().type == TokenType::UNI_TOKEN_LBRACE) {
+                            advance();
+                            op->init = parseBlock();
+                            if(!op->init) return nullptr;
+                        } else {
+                            op->init = std::make_unique<OpBlock>();
+                            op->init->type = OpType::UNI_OP_BLOCK;
+
+                            auto single = parseOne();
+                            if(!single) return nullptr;
+                            op->init->items.push_back(std::move(single));
+                        }
+                    }
 
                     return op;
                 }
@@ -370,7 +392,18 @@ namespace uni {
                 return op;
             } break;
 
-            default: return nullptr;
+            default: {
+                if(tok.type == TokenType::UNI_TOKEN_EOF) {
+                    std::cerr   << "[ERROR] (line " << tok.line
+                                << ") Unexpected end of file\n";
+                } else {
+                    std::cerr   << "[ERROR] (line " << tok.line
+                                << ") Unexpected token '"
+                                << tok.text << "'\n";
+                }
+
+                return nullptr;
+            }
         }
     }
 
@@ -383,7 +416,7 @@ namespace uni {
             peek().type != TokenType::UNI_TOKEN_EOF
         ) {
             std::unique_ptr<Op> child = parseOne();
-            if(!child) break;
+            if(!child) return nullptr;
 
             op->items.push_back(std::move(child));
         }
@@ -398,7 +431,7 @@ namespace uni {
 
         while(peek().type != TokenType::UNI_TOKEN_EOF) {
             std::unique_ptr<Op> child = parseOne();
-            if(!child) break;
+            if(!child) return nullptr;
 
             op->items.push_back(std::move(child));
         }

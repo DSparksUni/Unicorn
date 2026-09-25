@@ -105,6 +105,7 @@ namespace uni {
     struct OpLet : Op {
         std::string_view name;
         std::string_view type_name;
+        std::unique_ptr<OpBlock> init;
         bool is_mut;
 
         virtual ~OpLet() = default;

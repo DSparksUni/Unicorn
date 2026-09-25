@@ -325,6 +325,12 @@ namespace uni {
                     "var"
                 );
 
+                if(op->init) {
+                    emitBlock(emitter, op->init.get());
+                    auto val = emitter.pop();
+                    emitter.builder.CreateStore(val, variable);
+                }
+
                 emitter.variables.push_back({
                     .name = op->name,
                     .ptr = variable
@@ -446,6 +452,11 @@ static void collect_strings(uni::Emitter& emitter, uni::Op* raw_op) {
         case uni::OpType::UNI_OP_DEF: {
             auto op = dynamic_cast<const uni::OpDef*>(raw_op);
             collect_strings(emitter, op->body.get());
+        } break;
+
+        case uni::OpType::UNI_OP_LET: {
+            auto op = dynamic_cast<const uni::OpLet*>(raw_op);
+            if(op->init) collect_strings(emitter, op->init.get());
         } break;
 
         case uni::OpType::UNI_OP_FUNC: {

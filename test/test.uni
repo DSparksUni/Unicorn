@@ -1,6 +1,5 @@
-func test(x: int, y: int): int {
-    x y +
-}
+let x: int = 34
+let y: int = 35
+let xy: int = { x y + }
 
-34 35 test printi "\n" prints
-
+x printi " + " prints y printi " = " prints xy printi "\n" prints

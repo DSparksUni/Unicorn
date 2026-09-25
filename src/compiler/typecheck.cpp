@@ -448,6 +448,29 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                     return false;
                 }
 
+                if(op->init) {
+                    CLONE_CTX(init_ctx, ctx);
+                    if(!tc_block(init_ctx, op->init.get())) return false;
+
+                    if(init_ctx.stack.size() != 1) {
+                        std::cerr   << "[ERROR] (line " << raw_op->line
+                                    << ") 'let' initializer stack mismatch: "
+                                    << "expected 1 value but got "
+                                    << init_ctx.stack.size() << '\n';
+                        return false;
+                    }
+
+                    auto actual = init_ctx.stack.front();
+                    if(!tc_kinds_compatible(bind_type.kind, actual.kind)) {
+                        std::cerr   << "[ERROR] (line " << raw_op->line
+                                    << ") 'let' initializer type mismatch: "
+                                    << "expected '" << type_name(bind_type.kind)
+                                    << "' but got '" << type_name(actual.kind)
+                                    << "'\n";
+                        return false;
+                    }
+                }
+
                 uni::registerVariable({
                     .name = op->name,
                     .type = bind_type,
@@ -493,7 +516,7 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             if(ctx.stack.size() == 0) {
                 std::cerr   << "[ERROR] (line " << raw_op->line
-                            << ") 'store' required a value on the stack\n";
+                            << ") 'store' requires a value on the stack\n";
                 return false;
             }
 

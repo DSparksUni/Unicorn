@@ -83,9 +83,6 @@ These are generic over any single type (`dup`/`drop`) or pair of types
 ## Work in Progress
 - Local (non-global) `let` bindings are parsed but rejected by the type
   checker — all variables are currently global.
-- Currently, there is no way to declare and initialize a `let` binding in one
-  statement. The current method would be `let x: int` and then `42 ->x`, but 
-  having `let x: int = 42` would be more convenient.
 - If explicitly assigning a `let` binding, the type should be allowed to be deduced.
 - A `return` keyword to explicitly return from a function. This won't change
   the stack return at the end of the function, but allowing an early-exit would
