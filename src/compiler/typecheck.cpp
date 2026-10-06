@@ -38,7 +38,7 @@ static uni::Type tc_pop(uni::TcContext& ctx);
 
 static void tc_cloneCtx(uni::TcContext& ctx, uni::TcContext& dst, size_t* bind_counter);
 
-static bool tc_block(uni::TcContext& ctx, const uni::OpBlock* block);
+static bool tc_block(uni::TcContext& ctx, const uni::OpBlock* block, bool inherit_scope=false);
 static bool tc_op(uni::TcContext& ctx, const uni::Op* op);
 
 namespace uni {
@@ -46,6 +46,7 @@ namespace uni {
         TcContext ctx{
             .bind_counter = nullptr,
             .is_global = true,
+            .scope_start = 0
         };
 
         return tc_block(ctx, program);
@@ -102,6 +103,7 @@ static void tc_cloneCtx(uni::TcContext& ctx, uni::TcContext& dst, size_t* bind_c
     dst.bind_counter = ctx.bind_counter? bind_counter : nullptr;
     dst.variables = ctx.variables;
     dst.is_global = false;
+    dst.scope_start = ctx.scope_start;
 }
 #define CLONE_CTX(dst, src)                             \
     uni::TcContext dst;                                 \
@@ -240,12 +242,12 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             auto op = dynamic_cast<const uni::OpWord*>(raw_op);
 
             auto local_var = std::find_if(
-                ctx.variables.begin(), ctx.variables.end(),
+                ctx.variables.rbegin(), ctx.variables.rend(),
                 [op](const uni::Variable& v) {
                     return v.name == op->name;
                 }
             );
-            if(local_var != ctx.variables.end()) {
+            if(local_var != ctx.variables.rend()) {
                 tc_push(ctx.stack, local_var->type);
                 return true;
             }
@@ -439,52 +441,68 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
         case uni::OpType::UNI_OP_LET: {
             auto op = dynamic_cast<const uni::OpLet*>(raw_op);
 
-            if(ctx.is_global) {
-                uni::Type bind_type;
-                if(!resolveTypeName(op->type_name, &bind_type)) {
+            uni::Type bind_type;
+            if(!resolveTypeName(op->type_name, &bind_type)) {
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Unknown type name for variable: '"
+                            << op->type_name << "'\n";
+                return false;
+            }
+
+            if(op->init) {
+                CLONE_CTX(init_ctx, ctx);
+                if(!tc_block(init_ctx, op->init.get())) return false;
+
+                if(init_ctx.stack.size() != 1) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
-                                << ") Unknown type name for variable: '"
-                                << op->type_name << "'\n";
+                                << ") 'let' initializer stack mismatch: "
+                                << "expected 1 value but got "
+                                << init_ctx.stack.size() << '\n';
                     return false;
                 }
 
-                if(op->init) {
-                    CLONE_CTX(init_ctx, ctx);
-                    if(!tc_block(init_ctx, op->init.get())) return false;
+                auto actual = init_ctx.stack.front();
+                if(!tc_kinds_compatible(bind_type.kind, actual.kind)) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") 'let' initializer type mismatch: "
+                                << "expected '" << type_name(bind_type.kind)
+                                << "' but got '" << type_name(actual.kind)
+                                << "'\n";
+                    return false;
+                }
+            }
 
-                    if(init_ctx.stack.size() != 1) {
-                        std::cerr   << "[ERROR] (line " << raw_op->line
-                                    << ") 'let' initializer stack mismatch: "
-                                    << "expected 1 value but got "
-                                    << init_ctx.stack.size() << '\n';
-                        return false;
-                    }
+            uni::Variable var{
+                .name = op->name,
+                .type = bind_type,
+                .is_mut = op->is_mut,
+                .is_global = ctx.is_global
+            };
 
-                    auto actual = init_ctx.stack.front();
-                    if(!tc_kinds_compatible(bind_type.kind, actual.kind)) {
-                        std::cerr   << "[ERROR] (line " << raw_op->line
-                                    << ") 'let' initializer type mismatch: "
-                                    << "expected '" << type_name(bind_type.kind)
-                                    << "' but got '" << type_name(actual.kind)
-                                    << "'\n";
-                        return false;
-                    }
+            if(ctx.is_global) {
+                if(uni::lookupVariable(op->name)) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Duplicate word '" << op->name << "'\n";
+                    return false;
                 }
 
-                uni::registerVariable({
-                    .name = op->name,
-                    .type = bind_type,
-                    .is_mut = op->is_mut,
-                    .is_global = ctx.is_global
-                });
-
-                return true;
+                uni::registerVariable(var);
             } else {
-                // TODO: For now, all bindings will be global until functions are implemented
-                std::cerr   << "[ERROR] (line " << raw_op->line
-                            << ") Non-local variables are not implemented...\n";
-                return false;
+                if(std::find_if(
+                    ctx.variables.begin() + ctx.scope_start, ctx.variables.end(),
+                    [op](const uni::Variable& variable) {
+                        return variable.name == op->name;
+                    }
+                ) != ctx.variables.end()) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Duplicate local word '" << op->name << "'\n";
+                    return false;
+                }
+
+                ctx.variables.push_back(var);
             }
+
+            return true;
         }
 
         case uni::OpType::UNI_OP_STORE: {
@@ -492,12 +510,12 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             uni::Variable* var = nullptr;
             auto var_it = std::find_if(
-                ctx.variables.begin(), ctx.variables.end(),
+                ctx.variables.rbegin(), ctx.variables.rend(),
                 [op](const uni::Variable& var) {
                     return var.name == op->name;
                 }
             );
-            if(var_it == ctx.variables.end()) {
+            if(var_it == ctx.variables.rend()) {
                 var = uni::lookupVariable(op->name);
                 if(var == nullptr) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
@@ -594,9 +612,10 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             uni::TcContext body_ctx{
                 .variables = std::move(args),
-                .is_global = false
+                .is_global = false,
+                .scope_start = 0
             };
-            if(!tc_block(body_ctx, op->body.get())) return false;
+            if(!tc_block(body_ctx, op->body.get(), true)) return false;
 
             if(body_ctx.stack.size() != outputs.size()) {
                 std::cerr   << "[ERROR] (line " << raw_op->line
@@ -621,9 +640,23 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
     }
 }
 
-static bool tc_block(uni::TcContext& ctx, const uni::OpBlock* block) {
+static bool tc_block(uni::TcContext& ctx, const uni::OpBlock* block, bool inherit_scope) {
+    size_t outer_start;
+    if(!inherit_scope) {
+        outer_start = ctx.scope_start;
+        ctx.scope_start = ctx.variables.size();
+    }
+
     for(auto& op : block->items) {
         if(!tc_op(ctx, op.get())) return false;
+    }
+
+    if(!inherit_scope) {
+        ctx.variables.erase(
+            ctx.variables.begin() + ctx.scope_start,
+            ctx.variables.end()
+        );
+        ctx.scope_start = outer_start;
     }
 
     return true;

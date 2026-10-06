@@ -40,6 +40,7 @@ namespace uni {
 
         std::vector<Variable> variables;
         bool is_global;
+        size_t scope_start;
     };
 
     bool typecheck(const OpBlock* program);
