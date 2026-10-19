@@ -68,7 +68,7 @@ namespace uni {
 
     bool writeProgram(Emitter& emitter, const std::string& out_path);
 
-    void emitOp(Emitter& emitter, Op* op);
-    void emitBlock(Emitter& emitter, OpBlock* block);
+    bool emitOp(Emitter& emitter, Op* op);
+    bool emitBlock(Emitter& emitter, OpBlock* block);
     bool emitProgram(Emitter& emitter, OpBlock* program);
 }

@@ -101,7 +101,7 @@ namespace uni {
         return true;
     }
 
-    void emitOp(Emitter& emitter, Op* raw_op) {
+    bool emitOp(Emitter& emitter, Op* raw_op) {
         switch(raw_op->type) {
             case OpType::UNI_OP_PUSH_INT: {
                 auto op = dynamic_cast<const OpPushInt*>(raw_op);
@@ -110,7 +110,9 @@ namespace uni {
                     llvm::Type::getInt64Ty(emitter.ctx), op->value, true
                 );
                 emitter.push(val);
-            } break;
+
+                return true;
+            }
 
             case OpType::UNI_OP_PUSH_FLOAT: {
                 auto op = dynamic_cast<const OpPushFloat*>(raw_op);
@@ -119,14 +121,18 @@ namespace uni {
                     llvm::Type::getDoubleTy(emitter.ctx), op->value
                 );
                 emitter.push(val);
-            } break;
+
+                return true;
+            }
 
             case OpType::UNI_OP_PUSH_STR: {
                 auto op = dynamic_cast<const OpPushStr*>(raw_op);
 
                 llvm::Value* val = emitter.str_globals[op->global_idx];
                 emitter.push(val);
-            } break;
+
+                return true;
+            }
 
             case OpType::UNI_OP_WORD: {
                 auto op = dynamic_cast<OpWord*>(raw_op);
@@ -147,12 +153,13 @@ namespace uni {
                             std::cerr   << "[ERROR] (line " << raw_op->line
                                         << ") Unknown type for word '" << op->name
                                         << "' got past typechecking\n";
+                            return false;
                         }
                     } else {
                         emitter.push(var.ptr);
                     }
 
-                    break;
+                    return true;
                 }
 
                 Word* word = lookupWord(op->name);
@@ -180,10 +187,13 @@ namespace uni {
                     std::cerr   << "[ERROR] (line " << op->line
                                 << ") Unknown word '" << op->name
                                 << "' got past typechecking\n";
+                    return false;
                 }
-            } break;
 
-            case OpType::UNI_OP_BLOCK: break;
+                return true;
+            } 
+
+            case OpType::UNI_OP_BLOCK: return true;
 
             case OpType::UNI_OP_IF: {
                 auto op = dynamic_cast<const OpIf*>(raw_op);
@@ -261,7 +271,9 @@ namespace uni {
                         emitter.push(phi);
                     }
                 }
-            } break;
+
+                return true;
+            }
 
             case OpType::UNI_OP_WHILE: {
                 auto op = dynamic_cast<const OpWhile*>(raw_op);
@@ -309,9 +321,11 @@ namespace uni {
 
                 emitter.builder.CreateBr(cond_block);
                 emitter.builder.SetInsertPoint(end_block);
-            } break;
 
-            case OpType::UNI_OP_DEF: break;
+                return true;
+            }
+
+            case OpType::UNI_OP_DEF: return true;
 
             case OpType::UNI_OP_LET: {
                 auto op = dynamic_cast<const OpLet*>(raw_op);
@@ -321,7 +335,7 @@ namespace uni {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") Unknown type name for variable '"
                                 << op->name << "' got past typechecking\n";
-                    break;
+                    return false;
                 }
                 Type type = type_result.value();
 
@@ -330,8 +344,7 @@ namespace uni {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") Unknown type '" << op->type_name
                                 << "' for variable definition\n";
-                    // TODO: Proper error handling for missed typechecking bugs
-                    break;
+                    return false;
                 }
 
                 if(emitter.depth_counter == 1) {
@@ -405,7 +418,9 @@ namespace uni {
                         });
                     }
                 }
-            } break;
+
+                return true;
+            }
 
             case uni::OpType::UNI_OP_STORE: {
                 auto op = dynamic_cast<const uni::OpStore*>(raw_op);
@@ -417,7 +432,7 @@ namespace uni {
                         std::cerr   << "[ERROR] (line " << raw_op->line
                                     << ") Attempted store into non-memory "
                                     << "variable got past typechecking\n";
-                        break;
+                        return false;
                     }
 
                     llvm::Value* val = emitter.pop();
@@ -426,8 +441,11 @@ namespace uni {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") Unknown word '" << op->name
                                 << "' got past typechecking\n";
+                    return false;
                 }
-            } break;
+
+                return true;
+            }
 
             case OpType::UNI_OP_FUNC: {
                 auto op = dynamic_cast<const OpFunc*>(raw_op);
@@ -472,25 +490,31 @@ namespace uni {
                 emitter.builder.SetInsertPoint(prev_block);
                 emitter.stack = std::move(prev_stack);
                 emitter.locals = std::move(prev_locals);
-            } break;
+
+                return true;
+            }
         }
     }
 
-    void emitBlock(Emitter& emitter, OpBlock* block) {
+    bool emitBlock(Emitter& emitter, OpBlock* block) {
         const size_t before_size = emitter.locals.size();
 
         emitter.depth_counter++;
-        for(auto& op : block->items) emitOp(emitter, op.get());
+        for(auto& op : block->items){
+            if(!emitOp(emitter, op.get())) return false;
+        }
         emitter.depth_counter--;
 
         emitter.locals.erase(emitter.locals.begin() + before_size, emitter.locals.end());
+
+        return true;
     }
 
     bool emitProgram(Emitter& emitter, OpBlock* program) {
         collect_strings(emitter, program);
         collect_function_defs(emitter, program);
 
-        emitBlock(emitter, program);
+        if(!emitBlock(emitter, program)) return false;
 
         emitter.builder.CreateRet(
             llvm::ConstantInt::get(llvm::Type::getInt32Ty(emitter.ctx), 0, true)
