@@ -1,0 +1,9 @@
+let x: int = 1
+
+func show() {
+    let x: int = 2
+    x printi "\n" prints
+}
+
+show
+x printi "\n" prints

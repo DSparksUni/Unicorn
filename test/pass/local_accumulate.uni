@@ -1,0 +1,11 @@
+func sum_to(n: int): int {
+    let mut acc: int
+    let mut i: int = 1
+    while { i n <= } {
+        acc i + ->acc
+        i 1 + ->i
+    }
+    acc
+}
+
+5 sum_to printi "\n" prints

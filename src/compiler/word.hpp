@@ -50,6 +50,12 @@ namespace uni {
     #define UNI_TYPE_STRING (uni::Type{uni::TypeKind::UNI_KIND_STRING, 0})
     #define UNI_TYPE_VAR(id) (uni::Type{uni::TypeKind::UNI_KIND_VAR, (id)})
 
+    std::optional<Type> resolveTypeName(std::string_view name);
+    llvm::Type* getLLVMType(llvm::LLVMContext& ctx, const Type& type);
+    llvm::Type* getLLVMType(llvm::LLVMContext& ctx, std::string_view name);
+    std::string getTypeName(const Type& type);
+
+
     struct Word {
         std::string_view name;
         std::vector<Type> inputs;

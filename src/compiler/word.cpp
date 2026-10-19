@@ -86,6 +86,44 @@ static std::vector<uni::Word> word_table({
 });
 
 namespace uni {
+    std::optional<Type> resolveTypeName(std::string_view name) {
+        if(name == "int")
+            return UNI_TYPE_INT;
+        else if(name == "float")
+            return UNI_TYPE_FLOAT;
+        else if(name == "string")
+            return UNI_TYPE_STRING;
+
+        return std::nullopt;
+    }
+
+    llvm::Type* getLLVMType(llvm::LLVMContext& ctx, const Type& type) {
+        switch(type.kind) {
+            case TypeKind::UNI_KIND_INT: return llvm::Type::getInt64Ty(ctx);
+            case TypeKind::UNI_KIND_FLOAT: return llvm::Type::getDoubleTy(ctx);
+            case TypeKind::UNI_KIND_STRING: return llvm::PointerType::get(ctx, 0);
+
+            default: return nullptr;
+        }
+    }
+
+    llvm::Type* getLLVMType(llvm::LLVMContext& ctx, std::string_view name) {
+        auto type_result = resolveTypeName(name);
+        if(!type_result) return nullptr;
+        return getLLVMType(ctx, type_result.value());
+    }
+
+    std::string getTypeName(const Type& type) {
+        switch(type.kind) {
+            case TypeKind::UNI_KIND_INT:    return "int";
+            case TypeKind::UNI_KIND_FLOAT:  return "float";
+            case TypeKind::UNI_KIND_STRING: return "string";
+
+            case TypeKind::UNI_KIND_NUM:    return "num";
+            case TypeKind::UNI_KIND_VAR:    return "var";
+        }
+    }
+
     void registerWord(Word word) {
         word_table.push_back(word);
     }

@@ -1,0 +1,10 @@
+func f() {
+    let x: int = 1
+    1 if {
+        let x: int = 2
+        x printi "\n" prints
+    }
+    x printi "\n" prints
+}
+
+f

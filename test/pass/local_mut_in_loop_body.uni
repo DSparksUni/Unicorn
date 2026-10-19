@@ -1,0 +1,11 @@
+func f() {
+    let mut n: int = 0
+    while { n 3 < } {
+        let mut t: int
+        t printi "\n" prints
+        5 ->t
+        n 1 + ->n
+    }
+}
+
+f

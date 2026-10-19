@@ -1,0 +1,11 @@
+func f() {
+    let z: float
+    let mut a: float = 1.5
+    let s: string = "hi\n"
+    z printf "\n" prints
+    a 2.0 * ->a
+    a printf "\n" prints
+    s prints
+}
+
+f

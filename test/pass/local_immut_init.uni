@@ -1,0 +1,7 @@
+func f() {
+    let x: int = 6
+    let y: int = { x 7 * }
+    y printi "\n" prints
+}
+
+f

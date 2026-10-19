@@ -23,12 +23,12 @@ SOFTWARE.
 */
 
 #include "typecheck.hpp"
-#include "word.hpp"
 
 #include <algorithm>
 #include <iostream>
 
-static std::string type_name(uni::TypeKind kind);
+#include "word.hpp"
+
 static bool tc_kinds_compatible(uni::TypeKind a, uni::TypeKind b);
 
 static void tc_push(std::vector<uni::Type>& stack, uni::Type type);
@@ -50,16 +50,6 @@ namespace uni {
         };
 
         return tc_block(ctx, program);
-    }
-}
-
-static std::string type_name(uni::TypeKind kind) {
-    switch(kind) {
-        case uni::TypeKind::UNI_KIND_INT: return "int";
-        case uni::TypeKind::UNI_KIND_FLOAT: return "float";
-        case uni::TypeKind::UNI_KIND_NUM: return "num";
-        case uni::TypeKind::UNI_KIND_STRING: return "string";
-        case uni::TypeKind::UNI_KIND_VAR: return "var";
     }
 }
 
@@ -139,8 +129,8 @@ static bool tc_apply_word(
                     std::cerr   << "[ERROR] (line " << line
                                 << ") '" << name << "' type mismatch: "
                                 << "type variable '" << 'A' + bid << "' was bound to "
-                                << type_name(bindings.at(bid).kind) << "but got "
-                                << type_name(actual.kind) << '\n';
+                                << getTypeName(bindings.at(bid)) << "but got "
+                                << getTypeName(actual) << '\n';
                     return false;
                 }
             }
@@ -156,8 +146,8 @@ static bool tc_apply_word(
                 if(!tc_kinds_compatible(expected.kind, bindings.at(bid).kind)) {
                     std::cerr   << "[ERROR] (line " << line
                                 << ") '" << name << "' type mismatch: "
-                                << "expected " << type_name(expected.kind)
-                                << " but got " << type_name(bindings.at(bid).kind) << '\n';
+                                << "expected " << getTypeName(expected)
+                                << " but got " << getTypeName(bindings.at(bid)) << '\n';
                     return false;
                 }
             }
@@ -166,7 +156,7 @@ static bool tc_apply_word(
             if(!tc_kinds_compatible(actual.kind, uni::TypeKind::UNI_KIND_NUM)) {
                 std::cerr   << "[ERROR] (line " << line
                             << ") '" << name << "' type mismatch: "
-                            << "expected number but got " << type_name(actual.kind) << '\n';
+                            << "expected number but got " << getTypeName(actual) << '\n';
                 return false;
             }
 
@@ -178,8 +168,8 @@ static bool tc_apply_word(
                 if(!tc_kinds_compatible(actual.kind, expected.kind)) {
                     std::cerr   << "[ERROR] (line " << line
                                 << ") '" << name << "' type mismatch: "
-                                << "expected " << type_name(expected.kind)
-                                << "but got " << type_name(actual.kind) << '\n';
+                                << "expected " << getTypeName(expected)
+                                << "but got " << getTypeName(actual) << '\n';
                     return false;
                 }
             }
@@ -187,8 +177,8 @@ static bool tc_apply_word(
             if(!tc_kinds_compatible(actual.kind, expected.kind)) {
                 std::cerr   << "[ERROR] (line " << line
                             << ") '" << name << "' type mismatch: "
-                            << "expected " << type_name(expected.kind) << " but got "
-                            << type_name(actual.kind) << '\n';
+                            << "expected " << getTypeName(expected) << " but got "
+                            << getTypeName(actual) << '\n';
                 return false;
             }
         }
@@ -215,21 +205,6 @@ static bool tc_apply_word(
     }
 
     return true;
-}
-
-static bool resolveTypeName(std::string_view name, uni::Type* out) {
-    if(name == "int") {
-        *out = UNI_TYPE_INT;
-        return true;
-    } else if(name == "float") {
-        *out = UNI_TYPE_FLOAT;
-        return true;
-    } else if(name == "string") {
-        *out = UNI_TYPE_STRING;
-        return true;
-    }
-
-    return false;
 }
 
 static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
@@ -290,7 +265,7 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             if(cond.kind != uni::TypeKind::UNI_KIND_INT) {
                 std::cerr   << "[ERROR] (line " << raw_op->line
                             << ") 'if' condition must be int, got "
-                            << type_name(cond.kind) << '\n';
+                            << uni::getTypeName(cond) << '\n';
                 return false;
             }
 
@@ -326,8 +301,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 if(then_ctx.stack[i].kind != else_ctx.stack[i].kind) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") 'if/else' branch produce different types at stack position " << i
-                                << ": then=" << type_name(then_ctx.stack[i].kind)
-                                <<", else=" << type_name(else_ctx.stack[i].kind) << '\n';
+                                << ": then=" << uni::getTypeName(then_ctx.stack[i])
+                                << ", else=" << uni::getTypeName(else_ctx.stack[i]) << '\n';
                     return false;
                 }
             }
@@ -441,13 +416,14 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
         case uni::OpType::UNI_OP_LET: {
             auto op = dynamic_cast<const uni::OpLet*>(raw_op);
 
-            uni::Type bind_type;
-            if(!resolveTypeName(op->type_name, &bind_type)) {
+            auto bind_type_result = uni::resolveTypeName(op->type_name);
+            if(!bind_type_result) {
                 std::cerr   << "[ERROR] (line " << raw_op->line
                             << ") Unknown type name for variable: '"
                             << op->type_name << "'\n";
                 return false;
             }
+            uni::Type bind_type = bind_type_result.value();
 
             if(op->init) {
                 CLONE_CTX(init_ctx, ctx);
@@ -465,8 +441,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 if(!tc_kinds_compatible(bind_type.kind, actual.kind)) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") 'let' initializer type mismatch: "
-                                << "expected '" << type_name(bind_type.kind)
-                                << "' but got '" << type_name(actual.kind)
+                                << "expected '" << uni::getTypeName(bind_type)
+                                << "' but got '" << uni::getTypeName(actual)
                                 << "'\n";
                     return false;
                 }
@@ -542,8 +518,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             if(actual.kind != var->type.kind) {
                 std::cerr   << "[ERROR] (line " << raw_op->line
                             << ") 'store' type mismatch: "
-                            << "expected " << type_name(var->type.kind)
-                            << " but got " << type_name(actual.kind) << '\n';
+                            << "expected " << uni::getTypeName(var->type)
+                            << " but got " << uni::getTypeName(actual) << '\n';
                 return false;
             }
 
@@ -568,12 +544,14 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
             std::vector<uni::Type> inputs;
             std::vector<uni::Variable> args;
             for(const auto& arg : op->args) {
-                uni::Type type;
-                if(!resolveTypeName(arg.type_name, &type)) {
+                auto type_result = uni::resolveTypeName(arg.type_name);
+                if(!type_result) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") Unknown type '" << arg.type_name << "'\n";
                     return false;
                 }
+                uni::Type type = type_result.value();
+
                 inputs.push_back(type);
 
                 if(std::find_if(
@@ -591,14 +569,14 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
             std::vector<uni::Type> outputs;
             for(const auto& ret : op->rets) {
-                uni::Type type;
-                if(!resolveTypeName(ret, &type)) {
+                auto type_result = uni::resolveTypeName(ret);
+                if(!type_result) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") Unknown type '" << ret << "'\n";
                     return false;
                 }
 
-                outputs.push_back(type);
+                outputs.push_back(type_result.value());
             }
 
             uni::Word word{
@@ -628,8 +606,8 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 if(!tc_kinds_compatible(outputs[i].kind, body_ctx.stack[i].kind)) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") '" << op->name << "' type mismatch: "
-                                << "expected " << type_name(outputs[i].kind)
-                                << " but got " << type_name(body_ctx.stack[i].kind)
+                                << "expected " << uni::getTypeName(outputs[i])
+                                << " but got " << uni::getTypeName(body_ctx.stack[i])
                                 << '\n';
                     return false;
                 }

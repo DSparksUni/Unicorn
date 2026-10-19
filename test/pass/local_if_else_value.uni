@@ -1,0 +1,4 @@
+1 if { let a: int = 5 a } else { let a: int = 7 a }
+printi "\n" prints
+0 if { let a: int = 5 a } else { let a: int = 7 a }
+printi "\n" prints

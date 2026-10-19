@@ -1,0 +1,12 @@
+func a() {
+    let x: int = 10
+    x printi "\n" prints
+}
+
+func b() {
+    let mut x: int = 20
+    a
+    x printi "\n" prints
+}
+
+b

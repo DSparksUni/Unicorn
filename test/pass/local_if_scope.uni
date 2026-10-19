@@ -1,0 +1,5 @@
+1 if {
+    let x: int = 42
+    x printi "\n" prints
+}
+"done\n" prints

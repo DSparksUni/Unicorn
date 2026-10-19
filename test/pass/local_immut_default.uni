@@ -1,0 +1,6 @@
+func f() {
+    let x: int
+    x printi "\n" prints
+}
+
+f

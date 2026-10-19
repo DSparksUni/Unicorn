@@ -1,0 +1,9 @@
+func count() {
+    let mut i: int = 1
+    while { i 5 <= } {
+        i printi "\n" prints
+        i 1 + ->i
+    }
+}
+
+count

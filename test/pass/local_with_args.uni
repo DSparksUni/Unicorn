@@ -1,0 +1,6 @@
+func add_one(n: int): int {
+    let r: int = { n 1 + }
+    r
+}
+
+5 add_one printi "\n" prints

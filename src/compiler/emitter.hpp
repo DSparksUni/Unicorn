@@ -31,11 +31,14 @@ SOFTWARE.
 #include <llvm/IR/Module.h>
 
 #include "parser.hpp"
+#include "word.hpp"
 
 namespace uni {
     struct EmitVariable {
         std::string_view name;
         llvm::Value* ptr;
+        Type type;
+        bool needs_memory;
     };
 
     struct Emitter {
@@ -55,9 +58,12 @@ namespace uni {
         llvm::GlobalVariable* fmt_flt;
         llvm::GlobalVariable* fmt_str;
 
+        size_t depth_counter;
+
         Emitter();
         void push(llvm::Value* val);
         llvm::Value* pop();
+        std::optional<EmitVariable> lookupName(std::string_view name);
     };
 
     bool writeProgram(Emitter& emitter, const std::string& out_path);

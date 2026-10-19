@@ -1,0 +1,9 @@
+func f() {
+    let mut x: int
+    5 ->x
+    x printi "\n" prints
+    x 1 + ->x
+    x printi "\n" prints
+}
+
+f

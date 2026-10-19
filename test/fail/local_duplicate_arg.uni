@@ -1,0 +1,5 @@
+func f(x: int) {
+    let x: int
+}
+
+f

@@ -35,11 +35,11 @@ SOFTWARE.
 
 static void collect_strings(uni::Emitter& emitter, uni::Op* raw_op);
 static void collect_function_defs(uni::Emitter& emitter, uni::Op* raw_op);
-static llvm::Type* llvmTypeFromString(llvm::LLVMContext& ctx, uni::TypeKind kind);
 
 namespace uni {
     Emitter::Emitter():
-        module{std::make_unique<llvm::Module>("uni", ctx)}
+        module{std::make_unique<llvm::Module>("uni", ctx)},
+        depth_counter{0}
     {
         llvm::FunctionType* main_type = llvm::FunctionType::get(
             llvm::Type::getInt32Ty(ctx), false
@@ -68,6 +68,25 @@ namespace uni {
         llvm::Value* val = stack.back();
         stack.pop_back();
         return val;
+    }
+    std::optional<EmitVariable> Emitter::lookupName(std::string_view name) {
+        auto local_it = std::find_if(
+            locals.rbegin(), locals.rend(),
+            [name](const EmitVariable& var) {
+                return var.name == name;
+            }
+        );
+        if(local_it != locals.rend()) return *local_it;
+
+        auto var_it = std::find_if(
+            variables.begin(), variables.end(),
+            [name](const EmitVariable& var) {
+                return var.name == name;
+            }
+        );
+        if(var_it != variables.end()) return *var_it;
+
+        return std::nullopt;
     }
 
     bool writeProgram(Emitter& emitter, const std::string& out_path) {
@@ -112,31 +131,27 @@ namespace uni {
             case OpType::UNI_OP_WORD: {
                 auto op = dynamic_cast<OpWord*>(raw_op);
 
-                auto local_it = std::find_if(
-                    emitter.locals.begin(), emitter.locals.end(),
-                    [op](const EmitVariable& var) {
-                        return var.name == op->name;
+                auto var_result = emitter.lookupName(op->name);
+                if(var_result) {
+                    auto var = var_result.value();
+                    if(var.needs_memory) {
+                        llvm::Type* value_type = uni::getLLVMType(emitter.ctx, var.type);
+                        if(value_type) {
+                            llvm::Value* val = emitter.builder.CreateLoad(
+                                value_type,
+                                var.ptr,
+                                "load_variable"
+                            );
+                            emitter.push(val);
+                        } else {
+                            std::cerr   << "[ERROR] (line " << raw_op->line
+                                        << ") Unknown type for word '" << op->name
+                                        << "' got past typechecking\n";
+                        }
+                    } else {
+                        emitter.push(var.ptr);
                     }
-                );
-                if(local_it != emitter.locals.end()) {
-                    emitter.push(local_it->ptr);
-                    break;
-                }
 
-                auto var_it = std::find_if(
-                    emitter.variables.begin(), emitter.variables.end(),
-                    [op](const EmitVariable& var) {
-                        return var.name == op->name;
-                    }
-                );
-                if(var_it != emitter.variables.end()) {
-                    llvm::GlobalVariable* global = llvm::cast<llvm::GlobalVariable>(var_it->ptr);
-                    llvm::Value* val = emitter.builder.CreateLoad(
-                        global->getValueType(),
-                        global,
-                        "load_variable"
-                    );
-                    emitter.push(val);
                     break;
                 }
 
@@ -301,57 +316,116 @@ namespace uni {
             case OpType::UNI_OP_LET: {
                 auto op = dynamic_cast<const OpLet*>(raw_op);
 
-                llvm::Type* var_type;
-                if(op->type_name == "int") {
-                    var_type = llvm::Type::getInt64Ty(emitter.ctx);
-                } else if(op->type_name == "float") {
-                    var_type = llvm::Type::getDoubleTy(emitter.ctx);
-                } else if(op->type_name == "string") {
-                    var_type = llvm::PointerType::get(emitter.ctx, 0);
-                } else {
+                auto type_result = uni::resolveTypeName(op->type_name);
+                if(!type_result) {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Unknown type name for variable '"
+                                << op->name << "' got past typechecking\n";
+                    break;
+                }
+                Type type = type_result.value();
+
+                llvm::Type* var_type = uni::getLLVMType(emitter.ctx, type);
+                if(!var_type) {
                     std::cerr   << "[ERROR] (line " << raw_op->line
                                 << ") Unknown type '" << op->type_name
                                 << "' for variable definition\n";
+                    // TODO: Proper error handling for missed typechecking bugs
                     break;
                 }
 
-                llvm::Constant* var_init = llvm::Constant::getNullValue(var_type);
-                llvm::GlobalVariable* variable = new llvm::GlobalVariable(
-                    *emitter.module,
-                    var_type,
-                    false,
-                    llvm::GlobalValue::ExternalLinkage,
-                    var_init,
-                    "var"
-                );
+                if(emitter.depth_counter == 1) {
+                    // Global
 
-                if(op->init) {
-                    emitBlock(emitter, op->init.get());
-                    auto val = emitter.pop();
-                    emitter.builder.CreateStore(val, variable);
+                    llvm::Constant* var_init = llvm::Constant::getNullValue(var_type);
+                    llvm::GlobalVariable* variable = new llvm::GlobalVariable(
+                        *emitter.module,
+                        var_type,
+                        false,
+                        llvm::GlobalValue::ExternalLinkage,
+                        var_init,
+                        "var"
+                    );
+
+                    if(op->init) {
+                        emitBlock(emitter, op->init.get());
+                        auto val = emitter.pop();
+                        emitter.builder.CreateStore(val, variable);
+                    }
+
+                    emitter.variables.push_back({
+                        .name = op->name,
+                        .ptr = variable,
+                        .type = type,
+                        .needs_memory = true
+                    });
+                } else {
+                    //Local
+
+                    if(!op->is_mut) {
+                        llvm::Value* val;
+                        if(op->init) {
+                            emitBlock(emitter, op->init.get());
+                            val = emitter.pop();
+                        } else {
+                            val = llvm::Constant::getNullValue(var_type);
+                        }
+
+                        emitter.locals.push_back({
+                            .name = op->name,
+                            .ptr = val,
+                            .type = type,
+                            .needs_memory = false
+                        });
+                    } else {
+                        llvm::IRBuilder<> temp_builder{emitter.ctx};
+                        temp_builder.SetInsertPoint(
+                            &emitter.func->getEntryBlock(),
+                            emitter.func->getEntryBlock().getFirstInsertionPt()
+                        );
+
+                        llvm::Value* val;
+                        if(op->init) {
+                            emitBlock(emitter, op->init.get());
+                            val = emitter.pop();
+                        } else {
+                            val = llvm::Constant::getNullValue(var_type);
+                        }
+
+                        auto allocated = temp_builder.CreateAlloca(
+                            var_type, nullptr, std::string(op->name)
+                        );
+                        emitter.builder.CreateStore(val, allocated);
+
+                        emitter.locals.push_back({
+                            .name = op->name,
+                            .ptr = allocated,
+                            .type = type,
+                            .needs_memory = true
+                        });
+                    }
                 }
-
-                emitter.variables.push_back({
-                    .name = op->name,
-                    .ptr = variable
-                });
             } break;
 
             case uni::OpType::UNI_OP_STORE: {
                 auto op = dynamic_cast<const uni::OpStore*>(raw_op);
 
-                auto var_it = std::find_if(
-                    emitter.variables.begin(), emitter.variables.end(),
-                    [op](const uni::EmitVariable& var) {
-                        return var.name == op->name;
+                auto var_result = emitter.lookupName(op->name);
+                if(var_result) {
+                    auto var = var_result.value();
+                    if(!var.needs_memory) {
+                        std::cerr   << "[ERROR] (line " << raw_op->line
+                                    << ") Attempted store into non-memory "
+                                    << "variable got past typechecking\n";
+                        break;
                     }
-                );
-                if(var_it != emitter.variables.end()) {
+
                     llvm::Value* val = emitter.pop();
-                    emitter.builder.CreateStore(
-                        val,
-                        var_it->ptr
-                    );
+                    emitter.builder.CreateStore(val, var.ptr);
+                } else {
+                    std::cerr   << "[ERROR] (line " << raw_op->line
+                                << ") Unknown word '" << op->name
+                                << "' got past typechecking\n";
                 }
             } break;
 
@@ -374,7 +448,7 @@ namespace uni {
                 size_t i = 0;
                 for(auto& arg : word->func->args()) {
                     arg.setName(std::string(op->args[i].name));
-                    emitter.locals.push_back({op->args[i].name, &arg});
+                    emitter.locals.push_back({op->args[i].name, &arg, word->inputs[i], false});
                     i++;
                 }
 
@@ -403,7 +477,13 @@ namespace uni {
     }
 
     void emitBlock(Emitter& emitter, OpBlock* block) {
+        const size_t before_size = emitter.locals.size();
+
+        emitter.depth_counter++;
         for(auto& op : block->items) emitOp(emitter, op.get());
+        emitter.depth_counter--;
+
+        emitter.locals.erase(emitter.locals.begin() + before_size, emitter.locals.end());
     }
 
     bool emitProgram(Emitter& emitter, OpBlock* program) {
@@ -481,17 +561,17 @@ static void collect_function_defs(uni::Emitter& emitter, uni::Op* raw_op) {
 
             std::vector<llvm::Type*> param_types;
             for(auto& t : word->inputs)
-                param_types.push_back(llvmTypeFromString(emitter.ctx, t.kind));
+                param_types.push_back(uni::getLLVMType(emitter.ctx, t));
 
             llvm::Type* ret_type;
             if(word->outputs.empty()) {
                 ret_type = llvm::Type::getVoidTy(emitter.ctx);
             } else if(word->outputs.size() == 1) {
-                ret_type = llvmTypeFromString(emitter.ctx, word->outputs[0].kind);
+                ret_type = uni::getLLVMType(emitter.ctx, word->outputs[0]);
             } else {
                 std::vector<llvm::Type*> field_types;
                 for(auto& t : word->outputs)
-                    field_types.push_back(llvmTypeFromString(emitter.ctx, t.kind));
+                    field_types.push_back(uni::getLLVMType(emitter.ctx, t));
                 ret_type = llvm::StructType::get(emitter.ctx, field_types);
             }
 
@@ -505,17 +585,6 @@ static void collect_function_defs(uni::Emitter& emitter, uni::Op* raw_op) {
         } break;
 
         default: break;
-    }
-}
-
-static llvm::Type* llvmTypeFromString(llvm::LLVMContext& ctx, uni::TypeKind kind) {
-    switch(kind) {
-        case uni::TypeKind::UNI_KIND_INT:       return llvm::Type::getInt64Ty(ctx);
-        case uni::TypeKind::UNI_KIND_FLOAT:     return llvm::Type::getDoubleTy(ctx);
-        case uni::TypeKind::UNI_KIND_STRING:    return llvm::PointerType::get(ctx, 0);
-
-        case uni::TypeKind::UNI_KIND_NUM:
-        case uni::TypeKind::UNI_KIND_VAR:       return nullptr;
     }
 }
 
