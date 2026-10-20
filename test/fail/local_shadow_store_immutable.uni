@@ -1,0 +1,9 @@
+func f() {
+    let mut x: int
+    1 if {
+        let x: int
+        5 ->x
+    }
+}
+
+f

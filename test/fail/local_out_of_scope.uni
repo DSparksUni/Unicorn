@@ -1,0 +1,4 @@
+1 if {
+    let y: int
+}
+y printi

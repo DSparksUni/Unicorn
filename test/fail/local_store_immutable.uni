@@ -1,0 +1,6 @@
+func f() {
+    let x: int
+    5 ->x
+}
+
+f
