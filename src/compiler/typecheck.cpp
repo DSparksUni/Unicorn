@@ -49,7 +49,14 @@ namespace uni {
             .scope_start = 0
         };
 
-        return tc_block(ctx, program);
+        if(!tc_block(ctx, program)) return false;
+
+        if(lookupWord("main") == nullptr) {
+            std::cerr   << "[ERROR] No main function\n";
+            return false;
+        }
+
+        return true;
     }
 }
 
@@ -208,6 +215,16 @@ static bool tc_apply_word(
 }
 
 static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
+    if(ctx.is_global && !(
+        raw_op->type == uni::OpType::UNI_OP_DEF ||
+        raw_op->type == uni::OpType::UNI_OP_FUNC ||
+        raw_op->type == uni::OpType::UNI_OP_LET
+    )) {
+        std::cerr   << "[ERROR] (line " << raw_op->line
+                    << ") Only 'func', 'def', and 'let' are allowed at the top level\n";
+        return false;
+    }
+
     switch(raw_op->type) {
         case uni::OpType::UNI_OP_PUSH_INT: tc_push(ctx.stack, UNI_TYPE_INT); return true;
         case uni::OpType::UNI_OP_PUSH_FLOAT: tc_push(ctx.stack, UNI_TYPE_FLOAT); return true;
@@ -364,6 +381,12 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 return false;
             }
 
+            if(name == "main") {
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'main' must be declared as a function\n";
+                return false;
+            }
+
             size_t bind_counter = 0;
             uni::TcContext inf_ctx = uni::TcContext{
                 .bind_counter = &bind_counter,
@@ -415,6 +438,12 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
 
         case uni::OpType::UNI_OP_LET: {
             auto op = dynamic_cast<const uni::OpLet*>(raw_op);
+
+            if(ctx.is_global && op->name == "main") {
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") 'main' must be declared as a function\n";
+                return false;
+            }
 
             auto bind_type_result = uni::resolveTypeName(op->type_name);
             if(!bind_type_result) {
@@ -577,6 +606,14 @@ static bool tc_op(uni::TcContext& ctx, const uni::Op* raw_op) {
                 }
 
                 outputs.push_back(type_result.value());
+            }
+
+            if(op->name == "main" && (
+                !inputs.empty() || !outputs.empty() 
+            )) {
+                std::cerr   << "[ERROR] (line " << raw_op->line
+                            << ") Main function cannot take arguments or return values\n";
+                return false;
             }
 
             uni::Word word{
