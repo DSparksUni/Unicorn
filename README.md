@@ -81,9 +81,8 @@ These are generic over any single type (`dup`/`drop`) or pair of types
   - `-O (--opt-level) Sets the optimization level (0, 1, 2, 3, s, z)`
 
 ## Work in Progress
-- Currently files are just executed sequentially like a scripting language and just entered into
-  an overarching `main` function. Switching away from that and starting execution at a user-defined
-  main function makes more sense.
+- Pointers and memory allocation.
+- Modules and cross-file compilation.
 - If explicitly assigning a `let` binding, the type should be allowed to be deduced.
 - A `return` keyword to explicitly return from a function. This won't change
   the stack return at the end of the function, but allowing an early-exit would
