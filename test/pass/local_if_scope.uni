@@ -1,5 +1,7 @@
-1 if {
-    let x: int = 42
-    x printi "\n" prints
+func main() {
+    1 if {
+        let x: int = 42
+        x printi "\n" prints
+    }
+    "done\n" prints
 }
-"done\n" prints

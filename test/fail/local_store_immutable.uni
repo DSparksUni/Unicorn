@@ -3,4 +3,6 @@ func f() {
     5 ->x
 }
 
-f
+func main() {
+    f
+}

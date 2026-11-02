@@ -1,2 +1,5 @@
 let x: int
-5 ->x
+
+func main() {
+    5 ->x
+}

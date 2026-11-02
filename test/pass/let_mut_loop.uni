@@ -1,6 +1,9 @@
 let mut i: int
-1 ->i
-while { i 5 <= } {
-    i printi "\n" prints
-    i 1 + ->i
+
+func main() {
+    1 ->i
+    while { i 5 <= } {
+        i printi "\n" prints
+        i 1 + ->i
+    }
 }

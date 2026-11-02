@@ -9,4 +9,6 @@ func b() {
     x printi "\n" prints
 }
 
-b
+func main() {
+    b
+}

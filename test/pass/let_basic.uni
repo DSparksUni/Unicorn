@@ -1,2 +1,5 @@
 let x: int
-x printi "\n" prints
+
+func main() {
+    x printi "\n" prints
+}

@@ -6,4 +6,6 @@ func count() {
     }
 }
 
-count
+func main() {
+    count
+}

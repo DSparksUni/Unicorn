@@ -1,3 +1,5 @@
 func test(arg: wrong) {}
 
-test
+func main() {
+    test
+}

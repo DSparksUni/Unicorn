@@ -1,2 +1,4 @@
-0 5 - printi "\n" prints
-0 5 - 3 * printi "\n" prints
+func main() {
+    0 5 - printi "\n" prints
+    0 5 - 3 * printi "\n" prints
+}

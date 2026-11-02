@@ -8,4 +8,6 @@ func f() {
     s prints
 }
 
-f
+func main() {
+    f
+}

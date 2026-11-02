@@ -1,0 +1,7 @@
+def add { + }
+
+let x: int = { 34 35 add }
+
+func main() {
+    x printi "\n" prints
+}

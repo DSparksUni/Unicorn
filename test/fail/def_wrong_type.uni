@@ -1,2 +1,5 @@
 def square { dup * }
-"Hello\n" square
+
+func main() {
+    "Hello\n" square
+}

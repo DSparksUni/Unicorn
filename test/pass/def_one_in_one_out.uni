@@ -1,3 +1,6 @@
 def square { dup * }
-2 square printi "\n" prints
-3 square printi "\n" prints
+
+func main() {
+    2 square printi "\n" prints
+    3 square printi "\n" prints
+}

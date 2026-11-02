@@ -1,2 +1,5 @@
 def fsquare { dup * }
-3.0 fsquare printf "\n" prints
+
+func main() {
+    3.0 fsquare printf "\n" prints
+}

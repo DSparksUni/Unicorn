@@ -1,4 +1,7 @@
 def double { 2 * }
 def quad { double double }
-2 quad printi "\n" prints
-3 quad printi "\n" prints
+
+func main() {
+    2 quad printi "\n" prints
+    3 quad printi "\n" prints
+}

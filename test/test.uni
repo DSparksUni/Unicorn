@@ -2,4 +2,6 @@ let x: int = 34
 let y: int = 35
 let xy: int = { x y + }
 
-x printi " + " prints y printi " = " prints xy printi "\n" prints
+func main() {
+    x printi " + " prints y printi " = " prints xy printi "\n" prints
+}

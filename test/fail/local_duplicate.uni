@@ -3,4 +3,6 @@ func f() {
     let x: int
 }
 
-f
+func main() {
+    f
+}

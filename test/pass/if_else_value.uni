@@ -1,5 +1,7 @@
-1 if { 42 } else { 99 }
-printi "\n" prints
+func main() {
+    1 if { 42 } else { 99 }
+    printi "\n" prints
 
-0 if { 42 } else { 99 }
-printi "\n" prints
+    0 if { 42 } else { 99 }
+    printi "\n" prints
+}

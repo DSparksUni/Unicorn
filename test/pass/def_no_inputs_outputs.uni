@@ -1,2 +1,5 @@
 def greet { "Hello\n" prints }
-greet greet
+
+func main() {
+    greet greet
+}

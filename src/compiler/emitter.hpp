@@ -47,6 +47,8 @@ namespace uni {
         llvm::IRBuilder<> builder{ctx};
         llvm::Function* func;
 
+        llvm::Function* init_func;
+
         std::vector<llvm::GlobalVariable*> str_globals;
         std::vector<llvm::Value*> stack;
 

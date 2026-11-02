@@ -3,4 +3,6 @@ func add_one(n: int): int {
     r
 }
 
-5 add_one printi "\n" prints
+func main() {
+    5 add_one printi "\n" prints
+}

@@ -1,3 +1,6 @@
 let mut x: int
-5 ->x
-x printi "\n" prints
+
+func main() {
+    5 ->x
+    x printi "\n" prints
+}

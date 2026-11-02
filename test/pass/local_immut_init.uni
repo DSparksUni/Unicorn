@@ -4,4 +4,6 @@ func f() {
     y printi "\n" prints
 }
 
-f
+func main() {
+    f
+}

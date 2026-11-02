@@ -5,4 +5,7 @@ def countdown {
     }
     drop
 }
-5 countdown
+
+func main() {
+    5 countdown
+}

@@ -1,10 +1,12 @@
-1.0 1.0 == printi "\n" prints
-1.0 2.0 == printi "\n" prints
-1.0 2.0 != printi "\n" prints
-1.0 2.0 <  printi "\n" prints
-2.0 1.0 <  printi "\n" prints
-2.0 1.0 >  printi "\n" prints
-1.0 1.0 <= printi "\n" prints
-1.0 2.0 <= printi "\n" prints
-1.0 1.0 >= printi "\n" prints
-2.0 1.0 >= printi "\n" prints
+func main() {
+    1.0 1.0 == printi "\n" prints
+    1.0 2.0 == printi "\n" prints
+    1.0 2.0 != printi "\n" prints
+    1.0 2.0 <  printi "\n" prints
+    2.0 1.0 <  printi "\n" prints
+    2.0 1.0 >  printi "\n" prints
+    1.0 1.0 <= printi "\n" prints
+    1.0 2.0 <= printi "\n" prints
+    1.0 1.0 >= printi "\n" prints
+    2.0 1.0 >= printi "\n" prints
+}

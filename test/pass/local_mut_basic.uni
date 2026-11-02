@@ -6,4 +6,6 @@ func f() {
     x printi "\n" prints
 }
 
-f
+func main() {
+    f
+}

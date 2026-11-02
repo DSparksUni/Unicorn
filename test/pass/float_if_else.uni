@@ -1,4 +1,6 @@
-1 if { 1.5 } else { 2.5 }
-printf "\n" prints
-0 if { 1.5 } else { 2.5 }
-printf "\n" prints
+func main() {
+    1 if { 1.5 } else { 2.5 }
+    printf "\n" prints
+    0 if { 1.5 } else { 2.5 }
+    printf "\n" prints
+}

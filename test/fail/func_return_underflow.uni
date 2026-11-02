@@ -1,3 +1,5 @@
 func test(): int {}
 
-test
+func main() {
+    test
+}

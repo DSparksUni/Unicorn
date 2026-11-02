@@ -8,4 +8,6 @@ func sum_to(n: int): int {
     acc
 }
 
-5 sum_to printi "\n" prints
+func main() {
+    5 sum_to printi "\n" prints
+}

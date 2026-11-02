@@ -5,5 +5,7 @@ func show() {
     x printi "\n" prints
 }
 
-show
-x printi "\n" prints
+func main() {
+    show
+    x printi "\n" prints
+}

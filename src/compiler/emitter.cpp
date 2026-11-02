@@ -41,14 +41,14 @@ namespace uni {
         module{std::make_unique<llvm::Module>("uni", ctx)},
         depth_counter{0}
     {
-        llvm::FunctionType* main_type = llvm::FunctionType::get(
-            llvm::Type::getInt32Ty(ctx), false
+        llvm::FunctionType* init_type = llvm::FunctionType::get(
+            llvm::Type::getVoidTy(ctx), false
         );
-        func = llvm::Function::Create(
-            main_type, llvm::Function::ExternalLinkage, "main", module.get()
+        func = init_func = llvm::Function::Create(
+            init_type, llvm::Function::ExternalLinkage, "__uni_init", module.get()
         );
-        llvm::BasicBlock* entry = llvm::BasicBlock::Create(ctx, "entry", func);
-        builder.SetInsertPoint(entry);
+        llvm::BasicBlock* init_entry = llvm::BasicBlock::Create(ctx, "init_entry", init_func);
+        builder.SetInsertPoint(init_entry);
 
         llvm::FunctionType* printf_type = llvm::FunctionType::get(
             llvm::Type::getInt32Ty(ctx), {llvm::PointerType::get(ctx, 0)}, true
@@ -515,6 +515,21 @@ namespace uni {
         collect_function_defs(emitter, program);
 
         if(!emitBlock(emitter, program)) return false;
+        emitter.builder.CreateRetVoid();
+
+        llvm::FunctionType* main_type = llvm::FunctionType::get(
+            llvm::Type::getInt32Ty(emitter.ctx), false
+        );
+        llvm::Function* main_func = llvm::Function::Create(
+            main_type, llvm::Function::ExternalLinkage, "main", emitter.module.get()
+        );
+        llvm::BasicBlock* entry = llvm::BasicBlock::Create(emitter.ctx, "entry", main_func);
+        emitter.builder.SetInsertPoint(entry);
+
+        emitter.builder.CreateCall(emitter.init_func);
+
+        Word* main_body = lookupWord("main");
+        emitter.builder.CreateCall(main_body->func);
 
         emitter.builder.CreateRet(
             llvm::ConstantInt::get(llvm::Type::getInt32Ty(emitter.ctx), 0, true)
@@ -581,6 +596,10 @@ static void collect_function_defs(uni::Emitter& emitter, uni::Op* raw_op) {
 
         case uni::OpType::UNI_OP_FUNC: {
             auto op = dynamic_cast<const uni::OpFunc*>(raw_op);
+
+            std::string func_name = (op->name == "main")?
+                "__uni_main" : std::string(op->name);
+
             uni::Word* word = uni::lookupWord(op->name);
 
             std::vector<llvm::Type*> param_types;
@@ -602,7 +621,7 @@ static void collect_function_defs(uni::Emitter& emitter, uni::Op* raw_op) {
             llvm::Function* fn = llvm::Function::Create(
                 llvm::FunctionType::get(ret_type, param_types, false),
                 llvm::Function::ExternalLinkage,
-                std::string(op->name),
+                func_name,
                 emitter.module.get()
             );
             word->func = fn;

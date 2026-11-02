@@ -2,4 +2,6 @@ func test(): int {
     69 420
 }
 
-test
+func main() {
+    test
+}

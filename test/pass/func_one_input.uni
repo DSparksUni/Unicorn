@@ -2,4 +2,6 @@ func println(s: string) {
     s prints "\n" prints
 }
 
-"Hello, world!" println
+func main() {
+    "Hello, world!" println
+}

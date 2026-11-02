@@ -58,52 +58,54 @@ func mix(a: int, b: int): int {
     a b + a b - *
 }
 
-"inc chain: " prints
-0 ->acc
-acc inc65536 ->acc
-acc printi "\n" prints
+func main() {
+    "inc chain: " prints
+    0 ->acc
+    acc inc65536 ->acc
+    acc printi "\n" prints
 
-"nested loops: " prints
-0 ->total
-0 ->i
-while { i 200 < } {
-    0 ->j
-    while { j 200 < } {
-        total inc16 ->total
-        j 1 + ->j
+    "nested loops: " prints
+    0 ->total
+    0 ->i
+    while { i 200 < } {
+        0 ->j
+        while { j 200 < } {
+            total inc16 ->total
+            j 1 + ->j
+        }
+        i 1 + ->i
     }
-    i 1 + ->i
-}
-total printi "\n" prints
+    total printi "\n" prints
 
-"branches: " prints
-0 ->total
-0 ->i
-while { i 20000 < } {
-    i i 3 / 3 * - 0 == if {
-        total inc64 ->total
-    } else {
-        total 1 - ->total
+    "branches: " prints
+    0 ->total
+    0 ->i
+    while { i 20000 < } {
+        i i 3 / 3 * - 0 == if {
+            total inc64 ->total
+        } else {
+            total 1 - ->total
+        }
+        i 1 + ->i
     }
-    i 1 + ->i
-}
-total printi "\n" prints
+    total printi "\n" prints
 
-"floats: " prints
-1.0 ->fl
-fl fstep4096 ->fl
-fl printf "\n" prints
+    "floats: " prints
+    1.0 ->fl
+    fl fstep4096 ->fl
+    fl printf "\n" prints
 
-"spin: " prints
-0 ->total
-spin1024
-total printi "\n" prints
+    "spin: " prints
+    0 ->total
+    spin1024
+    total printi "\n" prints
 
-"func calls: " prints
-0 ->total
-0 ->i
-while { i 50000 < } {
-    i 7 mix total + ->total
-    i 1 + ->i
+    "func calls: " prints
+    0 ->total
+    0 ->i
+    while { i 50000 < } {
+        i 7 mix total + ->total
+        i 1 + ->i
+    }
 }
 total printi "\n" prints

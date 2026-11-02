@@ -1,4 +1,6 @@
-1 if {
-    let y: int
+func main() {
+    1 if {
+        let y: int
+    }
+    y printi
 }
-y printi
