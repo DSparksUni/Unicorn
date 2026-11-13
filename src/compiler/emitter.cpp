@@ -140,23 +140,19 @@ namespace uni {
                 auto var_result = emitter.lookupName(op->name);
                 if(var_result) {
                     auto var = var_result.value();
-                    if(var.needs_memory) {
-                        llvm::Type* value_type = uni::getLLVMType(emitter.ctx, var.type);
-                        if(value_type) {
-                            llvm::Value* val = emitter.builder.CreateLoad(
-                                value_type,
-                                var.ptr,
-                                "load_variable"
-                            );
-                            emitter.push(val);
-                        } else {
-                            std::cerr   << "[ERROR] (line " << raw_op->line
-                                        << ") Unknown type for word '" << op->name
-                                        << "' got past typechecking\n";
-                            return false;
-                        }
+                    llvm::Type* value_type = uni::getLLVMType(emitter.ctx, var.type);
+                    if(value_type) {
+                        llvm::Value* val = emitter.builder.CreateLoad(
+                            value_type,
+                            var.ptr,
+                            "load_variable"
+                        );
+                        emitter.push(val);
                     } else {
-                        emitter.push(var.ptr);
+                        std::cerr   << "[ERROR] (line " << raw_op->line
+                                    << ") Unknown type for word '" << op->name
+                                    << "' got past typechecking\n";
+                        return false;
                     }
 
                     return true;
@@ -370,53 +366,34 @@ namespace uni {
                         .name = op->name,
                         .ptr = variable,
                         .type = type,
-                        .needs_memory = true
                     });
                 } else {
                     //Local
 
-                    if(!op->is_mut) {
-                        llvm::Value* val;
-                        if(op->init) {
-                            emitBlock(emitter, op->init.get());
-                            val = emitter.pop();
-                        } else {
-                            val = llvm::Constant::getNullValue(var_type);
-                        }
+                    llvm::IRBuilder<> temp_builder{emitter.ctx};
+                    temp_builder.SetInsertPoint(
+                        &emitter.func->getEntryBlock(),
+                        emitter.func->getEntryBlock().getFirstInsertionPt()
+                    );
 
-                        emitter.locals.push_back({
-                            .name = op->name,
-                            .ptr = val,
-                            .type = type,
-                            .needs_memory = false
-                        });
+                    llvm::Value* val;
+                    if(op->init) {
+                        emitBlock(emitter, op->init.get());
+                        val = emitter.pop();
                     } else {
-                        llvm::IRBuilder<> temp_builder{emitter.ctx};
-                        temp_builder.SetInsertPoint(
-                            &emitter.func->getEntryBlock(),
-                            emitter.func->getEntryBlock().getFirstInsertionPt()
-                        );
-
-                        llvm::Value* val;
-                        if(op->init) {
-                            emitBlock(emitter, op->init.get());
-                            val = emitter.pop();
-                        } else {
-                            val = llvm::Constant::getNullValue(var_type);
-                        }
-
-                        auto allocated = temp_builder.CreateAlloca(
-                            var_type, nullptr, std::string(op->name)
-                        );
-                        emitter.builder.CreateStore(val, allocated);
-
-                        emitter.locals.push_back({
-                            .name = op->name,
-                            .ptr = allocated,
-                            .type = type,
-                            .needs_memory = true
-                        });
+                        val = llvm::Constant::getNullValue(var_type);
                     }
+
+                    auto allocated = temp_builder.CreateAlloca(
+                        var_type, nullptr, std::string(op->name)
+                    );
+                    emitter.builder.CreateStore(val, allocated);
+
+                    emitter.locals.push_back({
+                        .name = op->name,
+                        .ptr = allocated,
+                        .type = type
+                    });
                 }
 
                 return true;
@@ -428,13 +405,6 @@ namespace uni {
                 auto var_result = emitter.lookupName(op->name);
                 if(var_result) {
                     auto var = var_result.value();
-                    if(!var.needs_memory) {
-                        std::cerr   << "[ERROR] (line " << raw_op->line
-                                    << ") Attempted store into non-memory "
-                                    << "variable got past typechecking\n";
-                        return false;
-                    }
-
                     llvm::Value* val = emitter.pop();
                     emitter.builder.CreateStore(val, var.ptr);
                 } else {
@@ -466,7 +436,14 @@ namespace uni {
                 size_t i = 0;
                 for(auto& arg : word->func->args()) {
                     arg.setName(std::string(op->args[i].name));
-                    emitter.locals.push_back({op->args[i].name, &arg, word->inputs[i], false});
+
+                    auto allocated = emitter.builder.CreateAlloca(
+                        word->func->getType(), nullptr, std::string(op->name)  
+                    );
+                    emitter.builder.CreateStore(&arg, allocated);
+
+                    emitter.locals.push_back({op->args[i].name, allocated, word->inputs[i]});
+
                     i++;
                 }
 

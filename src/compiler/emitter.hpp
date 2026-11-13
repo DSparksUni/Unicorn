@@ -38,7 +38,6 @@ namespace uni {
         std::string_view name;
         llvm::Value* ptr;
         Type type;
-        bool needs_memory;
     };
 
     struct Emitter {
